@@ -28,8 +28,6 @@ public class GroqAPIClient {
     @Value("${api.key}")
     private String groqApiKey;
 
-//            "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";
-
     public List<ProposalScore> sendBatch(List<Proposal> batch) {
         try {
             String prompt = buildPromptFromBatch(batch);
