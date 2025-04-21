@@ -17,6 +17,7 @@ public class ProposalScore {
     private String proposalId;
     private Score score;
     private Instant evaluatedAt;
-    private String evaluatedBy;
+
+    private int rank;
 
 }
