@@ -90,7 +90,11 @@ public class GroqAPIClient {
                 JSONObject entry = results.getJSONObject(i);
 
                 ProposalScore score = new ProposalScore();
-                score.setProposalId(entry.getString("proposalId").toString());
+
+                String label = entry.get("proposalId").toString().trim();
+                int index = Integer.parseInt(label.replace("Proposal ", "")) - 1;
+                score.setProposalId(batch.get(index).getId());
+
                 score.setEvaluatedAt(Instant.now());
 
                 JSONObject scoreJson = entry.getJSONObject("score");
