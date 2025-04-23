@@ -5,7 +5,6 @@ import fi.lumos.javabackend.entity.ProposalScore;
 import fi.lumos.javabackend.repository.ProposalScoreRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
-
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,19 +16,17 @@ public class GroqEvaluation {
 
     @Autowired
     public GroqAPIClient groqAPIService;
-
-    @Autowired private WebSocketProgressSender progressSender;
-
     @Autowired
     public ProposalScoreRepository proposalScoreRepository;
-
+    @Autowired
+    private WebSocketProgressSender progressSender;
 
     public void processProposals(List<Proposal> proposals) {
         int batchsize = 5;
         List<List<Proposal>> batches = splitIntoBatches(proposals, batchsize);
         int total_batches = batches.size();
 
-        AtomicInteger completed  = new AtomicInteger(0);
+        AtomicInteger completed = new AtomicInteger(0);
 
         for (List<Proposal> batch : batches) {
             processBatchAsync(batch, completed, total_batches);
@@ -63,7 +60,6 @@ public class GroqEvaluation {
         }
         return batches;
     }
-
 
 
     public void rankProposals() {

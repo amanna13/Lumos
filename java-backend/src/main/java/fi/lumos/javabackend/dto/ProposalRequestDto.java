@@ -1,6 +1,5 @@
 package fi.lumos.javabackend.dto;
 
-
 import lombok.Getter;
 import lombok.Setter;
 

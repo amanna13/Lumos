@@ -3,7 +3,6 @@ package fi.lumos.javabackend.services;
 import fi.lumos.javabackend.entity.Proposal;
 import fi.lumos.javabackend.entity.ProposalScore;
 import fi.lumos.javabackend.entity.Score;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 //This will be used to send the request to GROQ
-
 
 @Component
 public class GroqAPIClient {
@@ -40,9 +38,7 @@ public class GroqAPIClient {
             body.put("stream", false);
             JSONArray messages = new JSONArray();
 
-            messages.put(new JSONObject().put("role", "system")
-                    .put("content", "You are an evaluator scoring grant proposals on the basis of clarity, feasibility, impact, innovation and total on a scale of 1 to 100. The total will be your overall thought of the marks you would give. Don't need to give explanation just give the scores" +
-                            " Return the result as a valid JSON array inside triple backticks: ```[ {...}, {...} ]```"));
+            messages.put(new JSONObject().put("role", "system").put("content", "You are an evaluator scoring grant proposals on the basis of clarity, feasibility, impact, innovation and total on a scale of 1 to 100. The total will be your overall thought of the marks you would give. Don't need to give explanation just give the scores" + " Return the result as a valid JSON array inside triple backticks: ```[ {...}, {...} ]```"));
 
             messages.put(new JSONObject().put("role", "user").put("content", prompt));
 

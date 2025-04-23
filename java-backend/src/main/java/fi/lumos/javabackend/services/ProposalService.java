@@ -17,7 +17,6 @@ public class ProposalService {
     private ProposalRepository proposalRepository;
 
 
-
     public Proposal submitProposal(ProposalRequestDto proposalRequestDto) {
         Proposal proposal = new Proposal();
         proposal.setName(proposalRequestDto.getName());
