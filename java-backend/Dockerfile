@@ -23,7 +23,7 @@ FROM eclipse-temurin:17-jdk-jammy
 WORKDIR /app
 
 # Copy the JAR from the builder stage
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=build /app/target/java-backend-0.0.1-SNAPSHOT.jar app.jar
 
 # Expose the port your Spring Boot app runs on
 EXPOSE 8080
