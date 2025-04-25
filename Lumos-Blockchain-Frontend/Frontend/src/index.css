@@ -593,3 +593,17 @@
     opacity: 0.6;
   }
 }
+
+/* Highlight effect for the blockchain reset section */
+@keyframes pulse-highlight {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+  }
+}
+
+.highlight-section {
+  animation: pulse-highlight 2s ease-out;
+}

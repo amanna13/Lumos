@@ -38,7 +38,8 @@ export default function VotingPage() {
     account,
     hasVoted,
     getVotedProposal,
-    diagnoseContractConnectivity 
+    diagnoseContractConnectivity,
+    clearVote
   } = useBlockchain()
   
   const [proposals, setProposals] = useState([])
@@ -51,6 +52,7 @@ export default function VotingPage() {
   const [detailProposal, setDetailProposal] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [isResettingVote, setIsResettingVote] = useState(false);
 
   // Fetch proposals from /evaluation/rankings/top
   const fetchProposals = useCallback(async () => {
@@ -79,98 +81,99 @@ export default function VotingPage() {
       
       console.log('Fetched proposals count:', data.length);
       
+      // Add debug point to check data structure
+      console.log('Raw API response data structure:', data);
+      
       // Handle the new API response format which has proposal nested inside each item
       const normalized = data.map((item, index) => {
+        console.log(`Full item ${index}:`, item); // Log the entire item to understand its structure
+        
         // Extract the proposal from the nested structure - handle different API formats
         let p;
         if (item.proposal) {
-          // Format 1: { proposal: { ... } }
           p = item.proposal;
         } else if (item.proposalData) {
-          // Format 2: { proposalData: { ... } }
           p = item.proposalData;
         } else if (item.data) {
-          // Format 3: { data: { ... } }
           p = item.data;
         } else {
-          // Fallback to the item itself if no nested structure is found
           p = item;
         }
-        
-        console.log(`Processing proposal ${index}:`, p);
-        
+
+        // Defensive: fallback to empty object if p is null/undefined
+        if (!p) p = {};
+
         // Extract fields safely, with fallbacks and more debugging
-        const description = p?.description || '';
-        console.log(`Proposal ${index} description length:`, description.length);
-        
-        // For debug purposes, log all available properties
-        console.log(`Proposal ${index} available fields:`, Object.keys(p));
-        
-        const fields = {};
-        
-        // Directly map fields that are already available at top level
-        if (p.name) fields.name = p.name;
-        if (p.emailId) fields.emailId = p.emailId;
-        if (p.links) fields.links = p.links;
-        if (p.projectTitle) fields.projectTitle = p.projectTitle;
-        
-        // Extract additional fields from description if needed
-        const extractedFields = extractFields(description);
-        
-        // Merge directly available fields with those extracted from description
-        const mergedFields = { ...extractedFields, ...fields };
-        console.log(`Merged fields for proposal ${index}:`, mergedFields);
-        
-        // Create normalized proposal with careful fallbacks
+        const description = p.description || item.description || '';
+        // Improved proposer extraction: check all possible nested locations
+        let proposerFinal =
+          p.proposer ||
+          item.proposer ||
+          (item.proposal && item.proposal.proposer) ||
+          (item.proposalData && item.proposalData.proposer) ||
+          (item.data && item.data.proposer) ||
+          (p.projectTitle && p.proposer) ||
+          (p._fields && p._fields.proposer) ||
+          'Unknown';
+
+        // Try to extract projectTitle from multiple places
+        const mergedFields = {
+          ...(extractFields(description)),
+          ...(p || {}),
+        };
+
+        // Title fallback logic: prefer projectTitle, then title, then fallback
+        let title =
+          p.projectTitle ||
+          item.projectTitle ||
+          mergedFields.projectTitle ||
+          p.title ||
+          item.title ||
+          `Proposal ${index + 1}`;
+
+        // Description fallback logic
+        let descriptionFinal =
+          description ||
+          mergedFields.projectDescription ||
+          mergedFields.description ||
+          '';
+
+        // Defensive: ensure title, proposer, description are not undefined/null
+        if (!title || typeof title !== 'string' || !title.trim()) {
+          title = `Proposal ${index + 1}`;
+        }
+        if (!proposerFinal || typeof proposerFinal !== 'string' || !proposerFinal.trim()) {
+          proposerFinal = 'Unknown';
+        }
+        if (!descriptionFinal || typeof descriptionFinal !== 'string') {
+          descriptionFinal = '';
+        }
+
+        // Compose normalized proposal
         const normalizedProposal = {
           ...p,
-          id: p?.id?.toString() || item?.id?.toString() || `local-${index + 1}`,
-          voteCount: p?.voteCount || item?.voteCount || "0",
-          rank: item?.rank || index + 1,
-          title: mergedFields?.projectTitle || p?.projectTitle || p?.title || item?.title || `Proposal ${index + 1}`,
-          proposer: p?.proposer || item?.proposer || "Unknown",
-          description: description || item?.description || "",
-          _fields: mergedFields
+          id: (index + 1).toString(),
+          voteCount: p.voteCount || item.voteCount || "0",
+          rank: item.rank || index + 1,
+          title,
+          proposer: proposerFinal,
+          description: descriptionFinal,
+          _fields: mergedFields,
         };
-        
-        console.log(`Normalized proposal ${index}:`, {
-          id: normalizedProposal.id,
-          title: normalizedProposal.title,
-          hasFields: Object.keys(normalizedProposal._fields || {}).length > 0
-        });
-        
+
         return normalizedProposal;
       });
       
-      console.log('All normalized proposals:', normalized.map(p => ({ id: p.id, title: p.title })));
-      
-      // Add a fallback check to ensure we have enough proposals
-      if (normalized.length < 3) {
-        console.warn('Not enough proposals fetched, adding fallback proposals');
-        
-        // Add fallback proposals if we have less than 3
-        const fallbackCount = 3 - normalized.length;
-        for (let i = 0; i < fallbackCount; i++) {
-          const index = normalized.length + i;
-          normalized.push({
-            id: `fallback-${index + 1}`,
-            title: `Fallback Proposal ${index + 1}`,
-            description: "This is a fallback proposal created because not enough proposals were fetched from the API.",
-            proposer: "0x0000000000000000000000000000000000000000",
-            voteCount: "0",
-            rank: index + 1,
-            _fields: {
-              name: "Fallback Proposer",
-              emailId: "fallback@example.com",
-              projectTitle: `Fallback Proposal ${index + 1}`,
-              brief_summary: "This is a fallback proposal created because not enough proposals were fetched from the API."
-            }
-          });
-        }
-      }
+      console.log('Final normalized proposals:', normalized);
       
       // Force UI refresh by creating a new array
       setProposals([...normalized]);
+      
+      // Debug what's in state
+      setTimeout(() => {
+        console.log('Current proposals in state:', proposals);
+      }, 100);
+      
     } catch (err) {
       console.error("Error fetching proposals:", err);
       setError(err.message || 'Failed to load proposals');
@@ -199,6 +202,11 @@ export default function VotingPage() {
       setLoading(false);
     }
   }, []);
+
+  // Debug proposals whenever they change
+  useEffect(() => {
+    console.log('Proposals state updated:', proposals);
+  }, [proposals]);
 
   // Enhance the extractFields function to be more tolerant of different formats
   function enhancedExtractFields(description) {
@@ -407,64 +415,6 @@ export default function VotingPage() {
     }
   };
 
-  // Clear local vote for testing/demo purposes
-  const clearLocalVote = () => {
-    if (window.confirm('This will reset your vote in local storage only. It will not affect the blockchain. Continue?')) {
-      try {
-        // Get a complete list of all hasVoted and votedFor items for this account
-        const keysToRemove = [];
-        
-        // Account may be undefined or null, let's add a safeguard
-        if (!account) {
-          alert("No wallet connected. Please connect your wallet first.");
-          return;
-        }
-        
-        console.log("Attempting to clear vote for account:", account);
-        
-        // Find all keys with this account address (case insensitive)
-        const accountLower = account.toLowerCase();
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (
-            (key.startsWith('hasVoted_') || key.startsWith('votedFor_')) && 
-            key.toLowerCase().includes(accountLower)
-          ) {
-            keysToRemove.push(key);
-            console.log("Found key to remove:", key);
-          }
-        }
-        
-        // If no keys found, check for keys without address (fallback)
-        if (keysToRemove.length === 0) {
-          keysToRemove.push(`hasVoted_${account}`);
-          keysToRemove.push(`votedFor_${account}`);
-          console.log("No keys found, using default keys");
-        }
-        
-        // Remove all found keys
-        keysToRemove.forEach(key => {
-          localStorage.removeItem(key);
-          console.log("Removed key:", key);
-        });
-        
-        // Reset component state
-        setHasVoted(false);
-        setVotedProposal(null);
-        setSelectedProposal(null);
-        
-        console.log("Vote cleared successfully");
-        
-        // Show confirmation
-        alert("Your vote has been reset in local storage. The page will now reload.");
-        window.location.reload();
-      } catch (error) {
-        console.error("Error clearing vote:", error);
-        alert("Failed to clear vote: " + (error.message || "Unknown error"));
-      }
-    }
-  };
-
   // UI rendering
   if (error) {
     return (
@@ -584,19 +534,80 @@ export default function VotingPage() {
                   >
                     View Current Results
                   </button>
-                  {/* Add a button to clear local vote for testing/demo */}
-                  <button
-                    onClick={clearLocalVote}
-                    className="ml-4 px-6 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition duration-300"
-                  >
-                    Reset Vote (Local Only)
-                  </button>
+                  
+                  {/* TESTING MODE: Reset buttons for testing the voting system */}
+                  <div className="mt-4 p-2 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300 mb-2">Testing Tools</p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('This will reset your vote in local storage only. Continue?')) {
+                            try {
+                              // Clear local storage vote records
+                              localStorage.removeItem(`hasVoted_${account}`);
+                              localStorage.removeItem(`votedFor_${account}`);
+                              
+                              // Check the actual blockchain state
+                              const blockchainVoted = await hasVoted(account);
+                              
+                              if (blockchainVoted) {
+                                // Attempt to reset blockchain vote
+                                if (window.confirm("Local storage reset, but you still have a vote on the blockchain. Would you like to perform a blockchain reset?")) {
+                                  try {
+                                    const resetResult = await clearVote(account);
+                                    if (resetResult.success && !resetResult.isLocalOnly) {
+                                      alert("Vote successfully reset both in local storage and on the blockchain!");
+                                      setHasVoted(false);
+                                      setVotedProposal(null);
+                                      setSelectedProposal(null);
+                                    } else if (resetResult.success && resetResult.isLocalOnly) {
+                                      alert("Local storage reset successfully, but blockchain vote couldn't be reset. Please contact an administrator for help.");
+                                      
+                                      // Ask if they want to go to admin page
+                                      if (window.confirm("Would you like to go to the admin panel to try a different reset method?")) {
+                                        navigate('/admin-direct?action=reset-blockchain');
+                                      }
+                                    }
+                                  } catch (resetError) {
+                                    console.error("Failed to reset vote:", resetError);
+                                    alert("Local storage reset, but blockchain reset failed. You may need admin privileges to reset votes on the blockchain.");
+                                    
+                                    // Offer to navigate to admin panel
+                                    if (window.confirm("Would you like to go to the admin panel?")) {
+                                      navigate('/admin-direct?action=reset-blockchain');
+                                    }
+                                  }
+                                } else {
+                                  alert("Local storage reset. Contact an administrator to reset your blockchain vote.");
+                                }
+                              } else {
+                                alert("Local vote data cleared successfully.");
+                                // Update UI state
+                                setHasVoted(false);
+                                setVotedProposal(null);
+                                setSelectedProposal(null);
+                              }
+                              
+                              // No need to reload, just update the state based on blockchain
+                              setHasVoted(blockchainVoted);
+                            } catch (error) {
+                              console.error("Error checking blockchain vote state:", error);
+                              alert("Error verifying blockchain state. Please refresh the page manually.");
+                            }
+                          }
+                        }}
+                        className="px-3 py-1 text-xs bg-orange-500 text-white rounded-md hover:bg-orange-600 transition duration-300"
+                      >
+                        Reset Local Storage
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Proposals section - only show if not voted yet */}
-            {currentPhase === "Voting" && !hasVotedState && (
+            {currentPhase === "Voting" && !hasVotedState ? (
               <div className="mb-8">
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden mb-4">
                   <div className="p-6 border-b border-slate-200 dark:border-slate-700">
@@ -606,64 +617,73 @@ export default function VotingPage() {
                     </p>
                   </div>
                 </div>
+                
                 {proposals.length === 0 ? (
                   <div className="bg-white dark:bg-slate-800 p-6 rounded-lg text-center">
                     <p className="text-slate-500 dark:text-slate-400">No proposals available yet.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {proposals.map((proposal) => (
-                      <div 
-                        key={proposal.id}
-                        className={`bg-white dark:bg-slate-800 rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg ${
-                          selectedProposal === proposal.id
-                            ? 'ring-2 ring-indigo-500 transform scale-[1.02]'
-                            : ''
-                        }`}
-                      >
-                        <div className="p-5">
-                          <div className="flex justify-between items-start mb-3">
-                            <h3 className="font-semibold text-lg line-clamp-2">
-                              {proposal.title}
-                            </h3>
-                            <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-indigo-900 dark:text-indigo-300 whitespace-nowrap ml-2">
-                              {proposal.voteCount || 0} votes
-                            </span>
-                          </div>
-                          <div className="mb-4">
-                            <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-3 min-h-[3rem]">
-                              {getBriefDescription(proposal)}
-                            </p>
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                            Proposer: {proposal.proposer ? `${proposal.proposer.substring(0, 6)}...${proposal.proposer.substring(38)}` : 'Unknown'}
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <button
-                              onClick={() => handleShowDetails(proposal)}
-                              className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                              View Details
-                            </button>
-                            <button
-                              onClick={() => setSelectedProposal(proposal.id)}
-                              className={`px-3 py-1 rounded-md text-sm ${
-                                selectedProposal === proposal.id
-                                  ? 'bg-indigo-600 text-white'
-                                  : 'bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
-                              }`}
-                            >
-                              {selectedProposal === proposal.id ? 'Selected' : 'Select'}
-                            </button>
+                  <>
+                    <p className="text-slate-600 dark:text-slate-300 mb-4">
+                      Found {proposals.length} proposals available for voting.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {proposals.map((proposal) => (
+                        <div 
+                          key={proposal.id || `proposal-${Math.random()}`}
+                          className={`bg-white dark:bg-slate-800 rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg ${
+                            selectedProposal === proposal.id
+                              ? 'ring-2 ring-indigo-500 transform scale-[1.02]'
+                              : ''
+                          }`}
+                        >
+                          <div className="p-5">
+                            <div className="flex justify-between items-start mb-3">
+                              <h3 className="font-semibold text-lg line-clamp-2">
+                                {proposal.title}
+                              </h3>
+                              <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-indigo-900 dark:text-indigo-300 whitespace-nowrap ml-2">
+                                {proposal.voteCount || 0} votes
+                              </span>
+                            </div>
+                            <div className="mb-4">
+                              <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-3 min-h-[3rem]">
+                                {getBriefDescription(proposal)}
+                              </p>
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                              Proposer: {proposal.proposer ? `${proposal.proposer.substring(0, 6)}...${proposal.proposer.substring(38)}` : 'Unknown'}
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <button
+                                onClick={() => handleShowDetails(proposal)}
+                                className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center"
+                              >
+                                {/* Proper eye icon */}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1.5 12s4-7 10.5-7 10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />
+                                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth={2} fill="none"/>
+                                </svg>
+                                View Details
+                              </button>
+                              <button
+                                onClick={() => setSelectedProposal(proposal.id)}
+                                className={`px-3 py-1 rounded-md text-sm ${
+                                  selectedProposal === proposal.id
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
+                                }`}
+                              >
+                                {selectedProposal === proposal.id ? 'Selected' : 'Select'}
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  </>
                 )}
+                
                 {proposals.length > 0 && (
                   <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mt-6 flex flex-col sm:flex-row justify-between items-center">
                     <div className="mb-4 sm:mb-0">
@@ -690,7 +710,7 @@ export default function VotingPage() {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
 
             {/* Show "View Results" button when voting is completed */}
             {currentPhase === "Completed" && (

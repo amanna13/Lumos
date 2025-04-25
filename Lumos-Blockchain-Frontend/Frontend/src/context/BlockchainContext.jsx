@@ -13,8 +13,8 @@ import groqProgressService from '../utils/groqProgressService';
 const RENDER_API_ENDPOINT = 'https://lumos-mz9a.onrender.com/proposals/allproposals';
 
 // Contract addresses - replace with your deployed contract addresses
-const GRANT_MANAGER_ADDRESS = "0x012499D995eB88BeD9350dB5ec37EC5CCC975555"
-const VOTING_ADDRESS = "0x5cE016f2731e1c6877542Ddef36c7285b6c64F19"
+const GRANT_MANAGER_ADDRESS = "0x6aA88080189a0B16dD6AF33A17684AB0CC1acd9E"
+const VOTING_ADDRESS = "0xe60A4cd0Aa2949F9229eA8dBE6F93c9309a72828"
 
 // Disable debugging flags
 const DEBUG_CONTRACT_CALLS = false
@@ -633,9 +633,142 @@ export function BlockchainProvider({ children }) {
     return false;
   };
 
-  const clearVote = async () => {
-    // This would need implementation if your contract supports vote clearing
-    return false;
+  const clearVote = async (userAddress = null) => {
+    try {
+      if (!voting || !isConnected) {
+        throw new Error("Please connect your wallet first");
+      }
+      
+      const addressToReset = userAddress || account;
+      if (!addressToReset) {
+        throw new Error("No address provided");
+      }
+      
+      console.log(`Attempting to clear vote for address: ${addressToReset}`);
+      
+      // For admin/owner clearing another user's vote
+      if (userAddress && userAddress !== account) {
+        if (!isOwner && !isAdmin) {
+          throw new Error("Only admins can clear votes for other users");
+        }
+        
+        // Check if the contract has clearVote or clearVoteFor methods
+        const hasClearVoteMethod = typeof voting.clearVote === 'function';
+        const hasClearVoteForMethod = typeof voting.clearVoteFor === 'function';
+        
+        if (!hasClearVoteMethod && !hasClearVoteForMethod) {
+          console.warn("Contract doesn't have clearVote or clearVoteFor functions");
+          
+          // Fallback: Use localStorage only if we can't interact with the contract
+          localStorage.removeItem(`hasVoted_${userAddress}`);
+          localStorage.removeItem(`votedFor_${userAddress}`);
+          
+          return {
+            success: true,
+            isLocalOnly: true,
+            message: "Vote reset in local storage only. The blockchain vote remains unchanged."
+          };
+        }
+        
+        // Try to use available methods
+        try {
+          // First check if the user has voted
+          const userHasVoted = await voting.hasVoted(userAddress);
+          if (!userHasVoted) {
+            return {
+              success: true,
+              noActionRequired: true,
+              message: "This address has not voted, no action required"
+            };
+          }
+          
+          // Use clearVoteFor if available
+          if (hasClearVoteForMethod) {
+            const tx = await voting.clearVoteFor(userAddress);
+            const receipt = await tx.wait();
+            console.log(`Vote cleared for ${userAddress}:`, receipt);
+          } else if (hasClearVoteMethod) {
+            // Note: this may not work for other users depending on contract implementation
+            const tx = await voting.clearVote(userAddress);
+            const receipt = await tx.wait();
+            console.log(`Vote cleared for ${userAddress} using standard method:`, receipt);
+          }
+          
+          return {
+            success: true,
+            message: `Vote cleared for ${userAddress}`
+          };
+        } catch (err) {
+          console.error(`Error clearing vote for ${userAddress}:`, err);
+          
+          // Fallback to localStorage only
+          localStorage.removeItem(`hasVoted_${userAddress}`);
+          localStorage.removeItem(`votedFor_${userAddress}`);
+          
+          return {
+            success: true, 
+            isLocalOnly: true,
+            message: "Vote reset in local storage only. Failed to reset blockchain vote."
+          };
+        }
+      }
+      
+      // Standard path for clearing own vote
+      try {
+        if (typeof voting.clearVote === 'function') {
+          console.log("Clearing vote from blockchain...");
+          const tx = await voting.clearVote();
+          const receipt = await tx.wait();
+          
+          console.log("Vote cleared successfully:", receipt);
+        } else {
+          console.warn("Contract doesn't have clearVote function, using local storage only");
+        }
+        
+        // Always update local storage regardless of contract capability
+        localStorage.removeItem(`hasVoted_${account}`);
+        localStorage.removeItem(`votedFor_${account}`);
+        
+        return {
+          success: true,
+          isLocalOnly: typeof voting.clearVote !== 'function',
+          transactionHash: typeof voting.clearVote === 'function' ? receipt?.transactionHash : null,
+          message: typeof voting.clearVote === 'function' ? 
+            "Vote cleared from blockchain and local storage" : 
+            "Vote cleared from local storage only. The blockchain vote remains unchanged."
+        };
+      } catch (error) {
+        console.error("Error clearing vote:", error);
+        
+        // Fallback: Still clear localStorage even if blockchain clear fails
+        localStorage.removeItem(`hasVoted_${account}`);
+        localStorage.removeItem(`votedFor_${account}`);
+        
+        return {
+          success: true,
+          isLocalOnly: true,
+          error: error.message,
+          message: "Vote cleared from local storage only. The blockchain vote operation failed."
+        };
+      }
+    } catch (error) {
+      console.error("Error in clearVote function:", error);
+      throw error;
+    }
+  };
+
+  const resetAllVotes = async () => {
+    if (!voting || !isConnected) throw new Error("Connect wallet first");
+    if (!isOwner) throw new Error("Only owner/admin can reset all votes");
+    if (typeof voting.adminResetAllVotes !== "function") throw new Error("adminResetAllVotes not available on contract");
+    try {
+      const tx = await voting.adminResetAllVotes();
+      await tx.wait();
+      // Optionally clear localStorage for all users (only for local testing)
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   };
 
   const runGroqShortlisting = async () => {
@@ -789,17 +922,28 @@ export function BlockchainProvider({ children }) {
 
   const clearAllStorage = () => {
     try {
-      const { clearAllAppStorage } = require('../utils/storageUtils');
-      const result = clearAllAppStorage();
-      
-      if (result) {
-        setProposals([]);
-        setShortlistedProposals([]);
+      // Remove all vote-related keys from localStorage
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (
+          key.startsWith('hasVoted_') ||
+          key.startsWith('votedFor_') ||
+          key === 'voteUpdate'
+        ) {
+          keysToRemove.push(key);
+        }
       }
-      
-      return result;
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      // Optionally clear proposals and phase for a full reset:
+      // localStorage.removeItem('fallbackProposals');
+      // localStorage.removeItem('proposals_api_cache');
+      // localStorage.removeItem('currentPhase');
+      setProposals([]);
+      setShortlistedProposals([]);
+      return true;
     } catch (error) {
-      console.error("Error clearing application storage:", error);
+      console.error("Error clearing votes from local storage:", error);
       return false;
     }
   };
@@ -844,7 +988,7 @@ export function BlockchainProvider({ children }) {
     advancePhase,
     revertToPreviousPhase,
     clearVote,
-    runGroqShortlisting,
+    resetAllVotes,
     refreshProposals,
     diagnoseContractConnectivity,
     clearAllStorage,
