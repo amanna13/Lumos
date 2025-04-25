@@ -54,6 +54,11 @@ export default function VotingPage() {
   const [loading, setLoading] = useState(true)
   const [isResettingVote, setIsResettingVote] = useState(false);
 
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   // Fetch proposals from /evaluation/rankings/top
   const fetchProposals = useCallback(async () => {
     setLoading(true)

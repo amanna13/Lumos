@@ -48,84 +48,8 @@
 			"typeName": "page"
 		},
 		{
-			"id": "pointer:pointer",
-			"typeName": "pointer",
-			"x": 638.1184692382812,
-			"y": 368.43531682204315,
-			"lastActivityTimestamp": 1745567889722,
-			"meta": {}
-		},
-		{
-			"followingUserId": null,
-			"opacityForNextShape": 1,
-			"stylesForNextShape": {},
-			"brush": null,
-			"scribbles": [],
-			"cursor": {
-				"type": "default",
-				"rotation": 0
-			},
-			"isFocusMode": false,
-			"exportBackground": true,
-			"isDebugMode": false,
-			"isToolLocked": false,
-			"screenBounds": {
-				"x": 0,
-				"y": 0,
-				"w": 1284.72216796875,
-				"h": 602.7777709960938
-			},
-			"insets": [
-				false,
-				false,
-				true,
-				false
-			],
-			"zoomBrush": null,
-			"isGridMode": false,
-			"isPenMode": false,
-			"chatMessage": "",
-			"isChatting": false,
-			"highlightedUserIds": [],
-			"isFocused": true,
-			"devicePixelRatio": 1.440000057220459,
-			"isCoarsePointer": false,
-			"isHoveringCanvas": true,
-			"openMenus": [],
-			"isChangingStyle": false,
-			"isReadonly": false,
-			"meta": {},
-			"duplicateProps": null,
-			"id": "instance:instance",
-			"currentPageId": "page:page",
-			"typeName": "instance"
-		},
-		{
-			"editingShapeId": null,
-			"croppingShapeId": null,
-			"selectedShapeIds": [
-				"shape:rsTVF1B4gzJvVShsyIIZo"
-			],
-			"hoveredShapeId": "shape:rsTVF1B4gzJvVShsyIIZo",
-			"erasingShapeIds": [],
-			"hintingShapeIds": [],
-			"focusedGroupId": null,
-			"meta": {},
-			"id": "instance_page_state:page:page",
-			"pageId": "page:page",
-			"typeName": "instance_page_state"
-		},
-		{
-			"x": 0,
-			"y": 13.19444392014435,
-			"z": 1,
-			"meta": {},
-			"id": "camera:page:page",
-			"typeName": "camera"
-		},
-		{
-			"x": 305.78338623046875,
-			"y": 156.27166938781738,
+			"x": 255.60977172851562,
+			"y": 59.36412239074707,
 			"rotation": 0,
 			"isLocked": false,
 			"opacity": 1,
@@ -135,7 +59,7 @@
 			"props": {
 				"color": "black",
 				"size": "m",
-				"w": 604.7760009765625,
+				"w": 1152.2803955078125,
 				"font": "draw",
 				"textAlign": "start",
 				"autoSize": true,
@@ -151,7 +75,7 @@
 							"content": [
 								{
 									"type": "text",
-									"text": "Things to COmplete in Lumos"
+									"text": "Things to Complete in Lumos"
 								}
 							]
 						},
@@ -274,6 +198,72 @@
 											"content": [
 												{
 													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
+													"text": "Make sure that after submitting proposal the page should be redirected to homepage."
+												}
+											]
+										}
+									]
+								},
+								{
+									"type": "listItem",
+									"content": [
+										{
+											"type": "paragraph",
+											"attrs": {
+												"dir": "auto"
+											},
+											"content": [
+												{
+													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
+													"text": "make the placeholder text smaller"
+												}
+											]
+										}
+									]
+								},
+								{
+									"type": "listItem",
+									"content": [
+										{
+											"type": "paragraph",
+											"attrs": {
+												"dir": "auto"
+											},
+											"content": [
+												{
+													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
+													"text": "for every page re-direction it should be on the top"
+												}
+											]
+										}
+									]
+								},
+								{
+									"type": "listItem",
+									"content": [
+										{
+											"type": "paragraph",
+											"attrs": {
+												"dir": "auto"
+											},
+											"content": [
+												{
+													"type": "text",
 													"text": "Add Marketplace system"
 												}
 											]
@@ -288,6 +278,82 @@
 			"parentId": "page:page",
 			"index": "a1",
 			"typeName": "shape"
+		},
+		{
+			"id": "pointer:pointer",
+			"typeName": "pointer",
+			"x": 898.1205580887249,
+			"y": 313.88768765489857,
+			"lastActivityTimestamp": 1745603367987,
+			"meta": {}
+		},
+		{
+			"followingUserId": null,
+			"opacityForNextShape": 1,
+			"stylesForNextShape": {},
+			"brush": null,
+			"scribbles": [],
+			"cursor": {
+				"type": "default",
+				"rotation": 0
+			},
+			"isFocusMode": false,
+			"exportBackground": true,
+			"isDebugMode": false,
+			"isToolLocked": false,
+			"screenBounds": {
+				"x": 0,
+				"y": 0,
+				"w": 893.7499389648438,
+				"h": 372.9166564941406
+			},
+			"insets": [
+				false,
+				false,
+				true,
+				false
+			],
+			"zoomBrush": null,
+			"isGridMode": false,
+			"isPenMode": false,
+			"chatMessage": "",
+			"isChatting": false,
+			"highlightedUserIds": [],
+			"isFocused": true,
+			"devicePixelRatio": 1.440000057220459,
+			"isCoarsePointer": false,
+			"isHoveringCanvas": true,
+			"openMenus": [],
+			"isChangingStyle": false,
+			"isReadonly": false,
+			"meta": {},
+			"duplicateProps": null,
+			"id": "instance:instance",
+			"currentPageId": "page:page",
+			"typeName": "instance"
+		},
+		{
+			"editingShapeId": "shape:rsTVF1B4gzJvVShsyIIZo",
+			"croppingShapeId": null,
+			"selectedShapeIds": [
+				"shape:rsTVF1B4gzJvVShsyIIZo"
+			],
+			"hoveredShapeId": "shape:rsTVF1B4gzJvVShsyIIZo",
+			"erasingShapeIds": [],
+			"hintingShapeIds": [],
+			"focusedGroupId": null,
+			"meta": {},
+			"id": "instance_page_state:page:page",
+			"pageId": "page:page",
+			"typeName": "instance_page_state"
+		},
+		{
+			"x": -117.81695153150639,
+			"y": 163.88210490333086,
+			"z": 0.464465419232265,
+			"meta": {},
+			"id": "camera:page:page",
+			"typeName": "camera"
 		}
 	]
 }

@@ -50,6 +50,9 @@ coverage
 # Bower dependency directory (https://bower.io/)
 bower_components
 
+#Tldr 
+.tldr
+
 # node-waf configuration
 .lock-wscript
 
@@ -153,4 +156,3 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-.tldr

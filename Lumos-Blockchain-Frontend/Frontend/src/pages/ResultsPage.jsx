@@ -12,6 +12,13 @@ function extractSection(description, section) {
 }
 
 export default function ResultsPage() {
+
+   // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  
   const navigate = useNavigate()
   const { isConnected, currentPhase, getWinningProposal, connect, provider, votingContractAddress } = useBlockchain()
 

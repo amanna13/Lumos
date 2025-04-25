@@ -167,7 +167,8 @@ export default function ProposalSubmitPage() {
       });
       setTouched({});
       setTimeout(() => {
-        navigate('/voting');
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        navigate('/');
       }, 3000);
 
     } catch (err) {
@@ -205,7 +206,10 @@ export default function ProposalSubmitPage() {
             The proposal submission phase is currently not active. Please check back later or participate in the current {currentPhase} phase.
           </p>
           <button 
-            onClick={() => navigate('/')}
+            onClick={() => {
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              navigate('/');
+            }}
             className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300"
           >
             Return to Home
@@ -230,7 +234,10 @@ export default function ProposalSubmitPage() {
               {submitNote || "Your grant proposal has been submitted to the blockchain and saved to our database. You will be redirected to the home page shortly."}
             </p>
             <button 
-              onClick={() => navigate('/')}
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                navigate('/');
+              }}
               className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300"
             >
               Return to Home
@@ -488,7 +495,7 @@ export default function ProposalSubmitPage() {
                     onChange={handleInputChange}
                     onBlur={handleBlur}
                     className={`w-full px-4 py-2 border ${errors.longTermPlan ? 'border-red-500' : 'border-slate-300 dark:border-slate-600'} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-700`}
-                    placeholder="Describe your long-term vision for this project"
+                    placeholder="Describe your vision beyond the grant period. Include your project's sustainability model, future development roadmap, potential for community involvement, and how you plan to maintain or scale it over time."
                     required
                   />
                   {errors.longTermPlan && touched.longTermPlan && (
@@ -508,7 +515,7 @@ export default function ProposalSubmitPage() {
                     onChange={handleInputChange}
                     onBlur={handleBlur}
                     className={`w-full px-4 py-2 border ${errors.futureFundingPlans ? 'border-red-500' : 'border-slate-300 dark:border-slate-600'} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-700`}
-                    placeholder="How do you plan to fund this project after the initial grant?"
+                    placeholder="Outline how you plan to secure additional funding after this grant. Include potential revenue streams, fundraising strategies, partnerships, or any plans to become self-sustainable."
                     required
                   />
                   {errors.futureFundingPlans && touched.futureFundingPlans && (
