@@ -17,17 +17,17 @@ import java.io.IOException;
 public class PaymentTransactionController {
 
 
-    @Autowired
-    PaymentTransactionService paymentTransactionService;
+//    @Autowired
+//    PaymentTransactionService paymentTransactionService;
 
 
-    @PostMapping("/send")
-    public ResponseEntity<String> sendXLM(@RequestBody StellarTransaction transaction) throws IOException {
-        String recipientAddress = transaction.getRecipient();
-        String amount = transaction.getAmount();
-        String result = paymentTransactionService.sendXlm(recipientAddress, amount);
-        return new ResponseEntity<>(result, HttpStatus.OK);
-    }
+//    @PostMapping("/send")
+//    public ResponseEntity<String> sendXLM(@RequestBody StellarTransaction transaction) throws IOException {
+//        String recipientAddress = transaction.getRecipient();
+//        String amount = transaction.getAmount();
+//        String result = paymentTransactionService.sendXlm(recipientAddress, amount);
+//        return new ResponseEntity<>(result, HttpStatus.OK);
+//    }
 
 
 
