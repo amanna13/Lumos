@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useBlockchain } from '../context/BlockchainContext';
 import { isGrantManagerV2 } from '../utils/phaseSync';
+import { getPhaseOptions, normalizePhase } from '../utils/phaseUtils';
 
 const ADMIN_ACCESS_CODE = "lumos123";
 
@@ -40,13 +41,7 @@ export default function AdminDashboard() {
   const [phaseChangeError, setPhaseChangeError] = useState('');
   const [phaseChangeSuccess, setPhaseChangeSuccess] = useState('');
 
-  const PHASES = [
-    { value: "Submission", label: "Submission" },
-    { value: "Voting", label: "Voting" },
-    { value: "Completed", label: "Completed" },
-    { value: "GroqCheck", label: "GroqCheck" }
-  ];
-
+  const PHASES = getPhaseOptions();
   const [phaseOptions, setPhaseOptions] = useState(PHASES);
 
   useEffect(() => {
@@ -80,9 +75,16 @@ export default function AdminDashboard() {
         setPhaseChangeLoading(false);
         return;
       }
-      
+
+      const normalizedPhase = normalizePhase(manualPhase);
+      if (!normalizedPhase) {
+        setPhaseChangeError(`Invalid phase selected: ${manualPhase}`);
+        setPhaseChangeLoading(false);
+        return;
+      }
+
       // For GroqCheck phase, silently trigger the API
-      if (manualPhase === "GroqCheck") {
+      if (normalizedPhase === "GroqCheck") {
         try {
           await fetch('https://lumos-mz9a.onrender.com/evaluation/start', {
             method: 'POST',
@@ -93,20 +95,24 @@ export default function AdminDashboard() {
           // Continue with phase change - don't block on API failure
         }
       }
-      
+
       if (typeof setPhase === 'function') {
-        // Call setPhase with the selected phase value
-        const result = await setPhase(manualPhase);
-        
-        if (result && result.success) {
-          setPhaseChangeSuccess(`Phase successfully changed to ${manualPhase}`);
-        } else {
-          setPhaseChangeError("Failed to update phase");
+        try {
+          const result = await setPhase(normalizedPhase);
+          if (result && result.success) {
+            setPhaseChangeSuccess(`Phase successfully changed to ${normalizedPhase}`);
+          } else {
+            setPhaseChangeError(`Failed to update phase: ${result?.message || "Unknown error"}`);
+          }
+        } catch (phaseErr) {
+          console.error("Error setting phase:", phaseErr);
+          setPhaseChangeError(`Failed to update phase: ${phaseErr.message || "Unknown error"}`);
         }
       } else {
         setPhaseChangeError("setPhase function is not available in context");
       }
     } catch (err) {
+      console.error("Top-level error in handleSetPhase:", err);
       setPhaseChangeError(err.message || 'Failed to change phase');
     } finally {
       setPhaseChangeLoading(false);
@@ -151,17 +157,30 @@ export default function AdminDashboard() {
           let proposal = item.proposal || item.proposalData || item.data || item;
           return {
             id: proposal.id?.toString() ?? item.id?.toString() ?? (idx + 1),
-            title: proposal.projectTitle || item.projectTitle || "" ,
+            title: proposal.projectTitle || item.projectTitle || "",
             proposerName: proposal.name || item.name || "",
             stellarId: proposal.stellarWalletAddress || item.stellarWalletAddress || "",
             voteCount: proposal.voteCount || item.voteCount || "0"
           };
         });
-
         setProposalsState(normalized);
       } catch (err) {
-        setError(err.message || 'Failed to load proposals');
+        // Fallback: try to load from localStorage
+        try {
+          const local = localStorage.getItem('fallbackProposals');
+          if (local) {
+            const proposals = JSON.parse(local);
+            if (Array.isArray(proposals)) {
+              setProposalsState(proposals);
+              setError('Loaded proposals from local storage (API unavailable)');
+              return;
+            }
+          }
+        } catch (localErr) {
+          // Ignore local error, will set empty array below
+        }
         setProposalsState([]);
+        setError(err.message || 'Failed to load proposals');
       } finally {
         setLoading(false);
       }
@@ -174,17 +193,14 @@ export default function AdminDashboard() {
       setError('Please enter a valid Ethereum address (0x... format, 42 characters)');
       return;
     }
-
     setIsResettingBlockchain(true);
     setError('');
     setSuccess('');
-
     try {
       const result = await clearVote(userToReset);
-      
       if (result.success) {
         const successMessage = result.isLocalOnly 
-          ? `Reset local vote data for ${userToReset.substring(0, 6)}...${userToReset.substring(38)}. Note: The blockchain data could not be modified.` 
+          ? `Reset local vote data for ${userToReset.substring(0, 6)}...${userToReset.substring(38)}. Note: The blockchain data could not be modified.`
           : `Successfully reset vote for ${userToReset.substring(0, 6)}...${userToReset.substring(38)}`;
           
         setSuccess(successMessage);
@@ -228,13 +244,12 @@ export default function AdminDashboard() {
           <p className="text-slate-600 dark:text-slate-300 mb-8">
             Please connect your wallet to access the admin dashboard.
           </p>
-          <button 
+          <button
             onClick={connect}
             className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300"
           >
             Connect Wallet
           </button>
-          
           <div className="mt-8">
             <button
               onClick={() => {
@@ -250,11 +265,10 @@ export default function AdminDashboard() {
       </div>
     );
   }
-  
+
   return (
     <div className="min-h-screen py-12 px-6 bg-slate-50 dark:bg-slate-900">
       <div className="container mx-auto max-w-4xl">
-        
         <div className="flex flex-col md:flex-row md:space-x-8 mb-8">
           <div className="flex-1 bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 mb-6 md:mb-0">
             <div className="flex justify-between items-center mb-4">
@@ -344,19 +358,16 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-        
         {error && (
           <div className="mb-6 p-4 bg-red-100 border-l-4 border-red-500 text-red-700 dark:bg-red-900/30 dark:text-red-300">
             <p>{error}</p>
           </div>
         )}
-        
         {success && (
           <div className="mb-6 p-4 bg-green-100 border-l-4 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300">
             <p>{success}</p>
           </div>
         )}
-        
         <div id="blockchain-reset-section" className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 mb-8 transition-all duration-300">
           <h2 className="text-xl font-bold mb-4">Blockchain Vote Reset</h2>
           <div className="space-y-4">
@@ -364,7 +375,6 @@ export default function AdminDashboard() {
               <p className="font-medium">Warning: Advanced Feature</p>
               <p className="text-sm mt-1">Resetting votes directly interacts with the blockchain and requires admin privileges. This action cannot be undone.</p>
             </div>
-            
             <div className="bg-slate-50 dark:bg-slate-700/30 p-4 rounded-lg">
               <div className="flex justify-between mb-2">
                 <span className="text-slate-600 dark:text-slate-300">Successful Resets:</span>
@@ -375,7 +385,6 @@ export default function AdminDashboard() {
                 <span className="font-semibold text-red-600 dark:text-red-400">{resetFailed}</span>
               </div>
             </div>
-            
             <div>
               <label htmlFor="userAddress" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 User Address to Reset
@@ -389,7 +398,7 @@ export default function AdminDashboard() {
                   placeholder="0x... Ethereum address to reset"
                   className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-700"
                 />
-                <button 
+                <button
                   onClick={handleResetUserVote}
                   disabled={isResettingBlockchain || !userToReset}
                   className={`px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
@@ -403,7 +412,6 @@ export default function AdminDashboard() {
                 Enter the Ethereum address of the user whose vote you want to reset
               </p>
             </div>
-
             <div className="mt-6 border-t pt-4">
               <button
                 onClick={handleResetAllVotes}
@@ -418,7 +426,6 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
-        
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
           <h2 className="text-xl font-bold mb-4">Proposals ({proposalsState.length})</h2>
           <div className="overflow-x-auto">
@@ -457,7 +464,6 @@ export default function AdminDashboard() {
             </table>
           </div>
         </div>
-        
         <div className="mt-8 flex justify-center space-x-4">
           <button
             onClick={() => navigate('/')}
@@ -465,7 +471,6 @@ export default function AdminDashboard() {
           >
             Return to Home
           </button>
-          
           {currentPhase === "Submission" && (
             <button
               onClick={() => navigate('/submit-proposal')}

@@ -103,7 +103,7 @@ export function BlockchainProvider({ children }) {
 
   // Update phase
   const setPhase = async (phase) => {
-    if (!phase || !PHASES.includes(phase)) {
+    if (!phase || !Object.values(PHASES).includes(phase)) {
       throw new Error(`Invalid phase: ${phase}`);
     }
     
@@ -264,46 +264,6 @@ export function BlockchainProvider({ children }) {
     }
   };
 
-  const fetchProposals = async () => {
-    try {
-      const response = await fetch('https://lumos-mz9a.onrender.com/proposals', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache, no-store'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch proposals: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setProposals(data);
-      return data;
-    } catch (err) {
-      console.error("Error fetching proposals:", err);
-      return [];
-    }
-  };
-
-  // Fetch the evaluations status if in GroqCheck phase
-  const fetchGroqEvaluationStatus = async () => {
-    if (currentPhase !== "GroqCheck") return;
-    
-    try {
-      const response = await fetch('https://lumos-mz9a.onrender.com/evaluation/status');
-      if (response.ok) {
-        const data = await response.json();
-        setGroqEvaluationProgress(data.progress || 0);
-        setGroqEvaluationStatus(data.status || 'pending');
-        setGroqEvaluationMessage(data.message || '');
-      }
-    } catch (error) {
-      console.error("Error fetching Groq evaluation status:", error);
-    }
-  };
-
   // Diagnose contract connectivity - useful for troubleshooting
   const diagnoseContractConnectivity = async () => {
     try {
@@ -361,18 +321,8 @@ export function BlockchainProvider({ children }) {
   useEffect(() => {
     if (isConnected) {
       fetchCurrentPhase();
-      fetchProposals();
     }
   }, [isConnected]);
-
-  // Effect: check Groq evaluation status periodically if in that phase
-  useEffect(() => {
-    if (currentPhase === "GroqCheck") {
-      fetchGroqEvaluationStatus();
-      const interval = setInterval(fetchGroqEvaluationStatus, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [currentPhase]);
 
   // Add the voting contract address to the context value
   const value = {
@@ -400,7 +350,6 @@ export function BlockchainProvider({ children }) {
     getVotedProposal,
     clearVote,
     resetAllVotes,
-    fetchProposals,
     diagnoseContractConnectivity,
     getWinningProposal
   };
