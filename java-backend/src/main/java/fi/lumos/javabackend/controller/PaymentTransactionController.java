@@ -1,7 +1,6 @@
 package fi.lumos.javabackend.controller;
 
 import fi.lumos.javabackend.dto.StellarTransaction;
-import fi.lumos.javabackend.services.PaymentTransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
