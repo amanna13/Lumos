@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useBlockchain } from '../context/BlockchainContext';
-import GroqEvaluationProgress from '../components/GroqEvaluationProgress';
-import { isGrantManagerV2, fetchCurrentPhaseFromContract } from '../utils/phaseSync';
+import { isGrantManagerV2 } from '../utils/phaseSync';
 
 const ADMIN_ACCESS_CODE = "lumos123";
 
 export default function AdminDashboard() {
-  // Defensive fallback: if context is undefined, use empty object to avoid destructure error
   const blockchain = useBlockchain() || {};
   const {
     account,
@@ -18,8 +16,6 @@ export default function AdminDashboard() {
     setPhase,
     phaseLoading,
     phaseError,
-    runGroqShortlisting,
-    groqEvaluationStatus,
     connect,
     clearVote,
     resetAllVotes
@@ -40,36 +36,41 @@ export default function AdminDashboard() {
   const [resetAllLoading, setResetAllLoading] = useState(false);
   const [resetAllError, setResetAllError] = useState('');
   const [resetAllSuccess, setResetAllSuccess] = useState('');
-
-  // Add state for phase control
   const [phaseChangeLoading, setPhaseChangeLoading] = useState(false);
   const [phaseChangeError, setPhaseChangeError] = useState('');
   const [phaseChangeSuccess, setPhaseChangeSuccess] = useState('');
 
-  // List of phases in order
   const PHASES = [
     { value: "Submission", label: "Submission" },
-    { value: "GroqCheck", label: "GroqCheck" },
     { value: "Voting", label: "Voting" },
-    { value: "Completed", label: "Completed" }
+    { value: "Completed", label: "Completed" },
+    { value: "GroqCheck", label: "GroqCheck" }
   ];
 
-  // Determine current and next phase
+  const [phaseOptions, setPhaseOptions] = useState(PHASES);
+
+  useEffect(() => {
+    // Detect contract version and update phase options accordingly
+    isGrantManagerV2().then(isV2 => {
+      setIsV2(isV2);
+      setPhaseOptions(PHASES);
+    });
+  }, []);
+
   const currentPhaseIndex = PHASES.findIndex(p => (p.value.toLowerCase() === (currentPhase || '').toLowerCase()));
   const nextPhase = currentPhaseIndex >= 0 && currentPhaseIndex < PHASES.length - 1
     ? PHASES[currentPhaseIndex + 1].value
     : null;
 
-  // Handler for phase change (dropdown/manual)
-  const handleManualPhaseChange = async (e) => {
+  const handleManualPhaseChange = (e) => {
     const selectedPhase = e.target.value;
     setManualPhase(selectedPhase);
     setPhaseChangeError('');
     setPhaseChangeSuccess('');
   };
 
-  // Handler to actually set the phase
   const handleSetPhase = async () => {
+    if (phaseChangeLoading) return;
     setPhaseChangeLoading(true);
     setPhaseChangeError('');
     setPhaseChangeSuccess('');
@@ -79,48 +80,32 @@ export default function AdminDashboard() {
         setPhaseChangeLoading(false);
         return;
       }
-      // For GroqCheck, trigger backend API as well
+      
+      // For GroqCheck phase, silently trigger the API
       if (manualPhase === "GroqCheck") {
-        const resp = await fetch('https://lumos-mz9a.onrender.com/evaluation/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        if (!resp.ok) throw new Error('Failed to start GroqCheck phase');
+        try {
+          await fetch('https://lumos-mz9a.onrender.com/evaluation/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (err) {
+          console.warn("GroqCheck API call failed:", err.message);
+          // Continue with phase change - don't block on API failure
+        }
       }
+      
       if (typeof setPhase === 'function') {
-        await setPhase(manualPhase);
-        // Wait for the phase to actually update in the contract (poll for up to 5 seconds)
-        let tries = 0;
-        let updated = false;
-        let latestPhase = "";
-        while (tries < 25) {
-          await new Promise(res => setTimeout(res, 200));
-          try {
-            latestPhase = await fetchCurrentPhaseFromContract();
-          } catch (e) {
-            latestPhase = manualPhase;
-          }
-          const normalizedCurrent = (latestPhase || '').toLowerCase();
-          const normalizedTarget = manualPhase.toLowerCase();
-          if (
-            normalizedCurrent === normalizedTarget ||
-            (normalizedCurrent === "groqcheck" && normalizedTarget === "groq") ||
-            (normalizedCurrent === "groq" && normalizedTarget === "groqcheck")
-          ) {
-            updated = true;
-            break;
-          }
-          tries++;
+        // Call setPhase with the selected phase value
+        const result = await setPhase(manualPhase);
+        
+        if (result && result.success) {
+          setPhaseChangeSuccess(`Phase successfully changed to ${manualPhase}`);
+        } else {
+          setPhaseChangeError("Failed to update phase");
         }
-        if (!updated) {
-          setPhaseChangeError(
-            `Phase change did not complete. Current phase is "${latestPhase}". Please refresh and try again.`
-          );
-          setPhaseChangeLoading(false);
-          return;
-        }
+      } else {
+        setPhaseChangeError("setPhase function is not available in context");
       }
-      setPhaseChangeSuccess(`Phase changed to ${manualPhase}`);
     } catch (err) {
       setPhaseChangeError(err.message || 'Failed to change phase');
     } finally {
@@ -128,11 +113,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // Check if we were directed here to reset blockchain
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('action') === 'reset-blockchain') {
-      // Focus on the reset blockchain section
       setTimeout(() => {
         const section = document.getElementById('blockchain-reset-section');
         if (section) {
@@ -144,12 +127,10 @@ export default function AdminDashboard() {
     }
   }, [location]);
 
-  // Detect contract version on mount
   useEffect(() => {
     isGrantManagerV2().then(setIsV2);
   }, []);
 
-  // Load proposals when the component mounts
   useEffect(() => {
     async function fetchProposalsFromAPI() {
       setLoading(true);
@@ -166,11 +147,8 @@ export default function AdminDashboard() {
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error('Invalid proposals data');
 
-        // Extract nested proposal data robustly
         const normalized = data.map((item, idx) => {
-          // Try to find the nested proposal object
           let proposal = item.proposal || item.proposalData || item.data || item;
-          // Fallbacks for fields
           return {
             id: proposal.id?.toString() ?? item.id?.toString() ?? (idx + 1),
             title: proposal.projectTitle || item.projectTitle || "" ,
@@ -191,25 +169,6 @@ export default function AdminDashboard() {
     fetchProposalsFromAPI();
   }, [isConnected]);
 
-  // Handle Groq shortlisting
-  const handleRunGroq = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const result = await runGroqShortlisting();
-      if (result.success) {
-        setSuccess('Groq AI evaluation started successfully. Progress will be displayed below.');
-      } else {
-        setError(result.message || 'Failed to start Groq evaluation');
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to run Groq shortlisting');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle blockchain reset for a specific user
   const handleResetUserVote = async () => {
     if (!userToReset || !userToReset.startsWith('0x') || userToReset.length !== 42) {
       setError('Please enter a valid Ethereum address (0x... format, 42 characters)');
@@ -242,7 +201,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Handle reset all votes
   const handleResetAllVotes = async () => {
     if (!window.confirm("Are you sure you want to reset ALL votes on the blockchain? This cannot be undone.")) return;
     setResetAllLoading(true);
@@ -262,7 +220,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Connect wallet if needed
   if (!isConnected) {
     return (
       <div className="min-h-screen py-12 px-6 bg-slate-50 dark:bg-slate-900">
@@ -297,10 +254,24 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen py-12 px-6 bg-slate-50 dark:bg-slate-900">
       <div className="container mx-auto max-w-4xl">
+        
         <div className="flex flex-col md:flex-row md:space-x-8 mb-8">
-          {/* Current Status Card */}
           <div className="flex-1 bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 mb-6 md:mb-0">
-            <h2 className="text-xl font-bold mb-4">Current Status</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Current Status</h2>
+              {isOwner && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                  <span className="w-2 h-2 mr-1 bg-green-500 rounded-full animate-pulse"></span>
+                  Owner Access
+                </span>
+              )}
+              {isAdmin && !isOwner && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                  <span className="w-2 h-2 mr-1 bg-blue-500 rounded-full"></span>
+                  Admin Access
+                </span>
+              )}
+            </div>
             <div className="space-y-4">
               <div className="flex justify-between">
                 <span className="text-slate-600 dark:text-slate-300">Current Phase:</span>
@@ -326,46 +297,51 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
-          {/* Phase Control Card - moved to the side */}
           <div className="flex-1 bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-bold mb-4">Phase Control</h2>
-            <div className="flex flex-col gap-4">
-              <div>
-                <span className="text-slate-600 dark:text-slate-300 mr-2">Current Phase:</span>
-                <span className="font-semibold">{currentPhase}</span>
-              </div>
-              <div>
-                <label htmlFor="phase-select" className="text-slate-600 dark:text-slate-300 mr-2">Set Phase:</label>
-                <select
-                  id="phase-select"
-                  value={manualPhase || currentPhase}
-                  onChange={handleManualPhaseChange}
-                  className="px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
+            {isOwner ? (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <span className="text-slate-600 dark:text-slate-300 mr-2">Current Phase:</span>
+                  <span className="font-semibold">{currentPhase}</span>
+                </div>
+                <div>
+                  <label htmlFor="phase-select" className="text-slate-600 dark:text-slate-300 mr-2">Set Phase:</label>
+                  <select
+                    id="phase-select"
+                    value={manualPhase || currentPhase}
+                    onChange={handleManualPhaseChange}
+                    className="px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
+                  >
+                    {phaseOptions.map(phase => (
+                      <option key={phase.value} value={phase.value}>
+                        {phase.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleSetPhase}
+                  disabled={phaseChangeLoading || !manualPhase || manualPhase === currentPhase}
+                  className={`px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition ${
+                    phaseChangeLoading || !manualPhase || manualPhase === currentPhase ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
-                  {PHASES.map(phase => (
-                    <option key={phase.value} value={phase.value}>{phase.label}</option>
-                  ))}
-                </select>
+                  {phaseChangeLoading ? "Changing..." : `Set Phase`}
+                </button>
+                {phaseChangeError && (
+                  <div className="mt-2 text-red-600">{phaseChangeError}</div>
+                )}
+                {phaseChangeSuccess && (
+                  <div className="mt-2 text-green-600">{phaseChangeSuccess}</div>
+                )}
               </div>
-              <button
-                onClick={handleSetPhase}
-                disabled={phaseChangeLoading || !manualPhase || manualPhase === currentPhase}
-                className={`px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition ${
-                  phaseChangeLoading || !manualPhase || manualPhase === currentPhase ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {phaseChangeLoading ? "Changing..." : `Set Phase`}
-              </button>
-              {phaseChangeError && (
-                <div className="mt-2 text-red-600">{phaseChangeError}</div>
-              )}
-              {phaseChangeSuccess && (
-                <div className="mt-2 text-green-600">{phaseChangeSuccess}</div>
-              )}
-              <div className="text-xs text-slate-500 mt-2">
-                You can set any phase directly. For GroqCheck, backend evaluation will be triggered.
+            ) : (
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-300">
+                <p className="font-medium">Limited Access</p>
+                <p className="text-sm mt-1">Owner privileges required to change phases. Your current role is: {isAdmin ? 'Admin' : 'Viewer'}</p>
               </div>
-            </div>
+            )}
           </div>
         </div>
         
@@ -381,25 +357,6 @@ export default function AdminDashboard() {
           </div>
         )}
         
-        {/* GroqCheck Controls - Only show during GroqCheck phase */}
-        {currentPhase === "GroqCheck" && (
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold mb-4">GroqCheck Controls</h2>
-            <div className="space-y-4">
-              <button 
-                onClick={handleRunGroq}
-                disabled={loading && groqEvaluationStatus === 'running'}
-                className={`w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${loading || groqEvaluationStatus === 'running' ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {loading ? 'Starting...' : 
-                 groqEvaluationStatus === 'running' ? 'Evaluation In Progress...' : 
-                 'Run Groq Shortlisting'}
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {/* Blockchain Reset Section */}
         <div id="blockchain-reset-section" className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 mb-8 transition-all duration-300">
           <h2 className="text-xl font-bold mb-4">Blockchain Vote Reset</h2>
           <div className="space-y-4">
@@ -462,7 +419,6 @@ export default function AdminDashboard() {
           </div>
         </div>
         
-        {/* Proposals List */}
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
           <h2 className="text-xl font-bold mb-4">Proposals ({proposalsState.length})</h2>
           <div className="overflow-x-auto">
@@ -502,7 +458,6 @@ export default function AdminDashboard() {
           </div>
         </div>
         
-        {/* Navigation Links */}
         <div className="mt-8 flex justify-center space-x-4">
           <button
             onClick={() => navigate('/')}

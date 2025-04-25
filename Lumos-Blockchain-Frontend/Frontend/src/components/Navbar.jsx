@@ -18,7 +18,6 @@ export default function Navbar() {
   
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false);
   
   // Close mobile menu when route changes
   useEffect(() => {
@@ -27,22 +26,6 @@ export default function Navbar() {
   
   // Format account address for display
   const formattedAccount = account ? `${account.substring(0, 6)}...${account.substring(account.length - 4)}` : ''
-  
-  // Function to force a sync
-  const handleSyncPhase = async () => {
-    setIsSyncing(true);
-    try {
-      // Use fetchCurrentPhaseFromContract instead of fetchCurrentPhaseFromBackend
-      const { fetchCurrentPhaseFromContract } = await import('../utils/phaseSync');
-      const phase = await fetchCurrentPhaseFromContract();
-      await setPhase(phase);
-      // Toast message or some indicator could be added here
-    } catch (error) {
-      console.error("Failed to sync phase:", error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
   
   return (
     <nav className="bg-white shadow-sm dark:bg-slate-800 sticky top-0 z-50">
@@ -101,28 +84,6 @@ export default function Navbar() {
             </div>
           </div>
           <div className="hidden sm:ml-6 sm:flex sm:items-center">
-            <button
-              onClick={handleSyncPhase}
-              disabled={isSyncing}
-              className="mr-4 px-3 py-1 text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded hover:bg-indigo-200 dark:hover:bg-indigo-800/30 transition-colors"
-            >
-              {isSyncing ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-indigo-700 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Syncing...
-                </span>
-              ) : (
-                <span className="flex items-center">
-                  <svg className="mr-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh
-                </span>
-              )}
-            </button>
             {isConnected ? (
               <div className="ml-3 relative">
                 <div>

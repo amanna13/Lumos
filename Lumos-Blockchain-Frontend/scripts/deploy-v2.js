@@ -41,3 +41,15 @@ main()
     console.error("❌ Deployment failed:", error);
     process.exit(1);
   });
+
+/*
+  Deployment Instructions:
+  # 1. Open a terminal in your project root (where hardhat.config.js is located)
+  # 2. Ensure your .env file contains valid RPC_URL and PRIVATE_KEY for your target network (e.g., baseSepolia)
+  # 3. Run the following command to deploy GrantManagerV2 and Voting contracts:
+
+  npx hardhat run scripts/deploy-v2.js --network baseSepolia
+
+  # 4. After deployment, copy the printed GRANT_MANAGER_ADDRESS and VOTING_ADDRESS to your frontend config.
+  # 5. If the ABI changed, copy the new GrantManagerV2.json to your frontend as well.
+*/

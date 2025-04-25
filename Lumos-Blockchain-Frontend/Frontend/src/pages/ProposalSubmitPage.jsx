@@ -14,8 +14,6 @@ export default function ProposalSubmitPage() {
   const { 
     isConnected, 
     currentPhase, 
-    submitProposal, 
-    submitProposalToEndpoint, 
     connect 
   } = useBlockchain()
   
@@ -90,24 +88,24 @@ export default function ProposalSubmitPage() {
       [name]: validationErrors[name]
     }))
   }
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     const validationErrors = validateProposalForm(formData);
     setErrors(validationErrors);
-    
+
     const allTouched = Object.keys(formData).reduce((acc, key) => {
       acc[key] = true;
       return acc;
     }, {});
     setTouched(allTouched);
-    
+
     if (Object.keys(validationErrors).length > 0) {
       setSubmitError("Please fix the errors in the form before submitting");
       return;
     }
-    
+
     if (!isConnected) {
       try {
         await connect();
@@ -116,96 +114,62 @@ export default function ProposalSubmitPage() {
         return;
       }
     }
-    
+
     setSubmitting(true);
     setSubmitError('');
-    
+
     try {
-      const fullDescription = `
-## Name
-${formData.name}
+      // Prepare the payload as expected by the backend
+      const payload = {
+        name: formData.name,
+        emailId: formData.emailId,
+        links: formData.links,
+        projectTitle: formData.title,
+        projectDescription: formData.description,
+        brief_summary: formData.briefSummary,
+        primaryGoal: formData.primaryGoal,
+        specificObjective: formData.specificObjective,
+        budget: formData.budget,
+        longTermPlan: formData.longTermPlan,
+        futureFundingPlans: formData.futureFundingPlans,
+        stellarWalletAddress: formData.stellarWalletAddress
+      };
 
-## Email
-${formData.emailId}
+      const response = await fetch('https://lumos-mz9a.onrender.com/proposals/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
 
-## Links
-${formData.links}
-
-## Brief Summary
-${formData.briefSummary}
-
-## Description
-${formData.description}
-
-## Primary Goal
-${formData.primaryGoal}
-
-## Specific Objectives
-${formData.specificObjective}
-
-## Budget
-${formData.budget}
-
-## Long Term Plan
-${formData.longTermPlan}
-
-## Future Funding Plans
-${formData.futureFundingPlans}
-
-## Stellar Wallet Address
-${formData.stellarWalletAddress}
-      `.trim();
-      
-      let blockchainSubmissionSuccess = false;
-      
-      try {
-        const result = await submitProposal(formData.title, fullDescription);
-        blockchainSubmissionSuccess = !result.mockSubmission;
-        console.log("Blockchain submission result:", result);
-        
-        if (result.mockSubmission) {
-          console.warn("Used mock blockchain submission due to contract issues");
-        } else {
-          console.log("Blockchain submission successful");
-        }
-      } catch (blockchainError) {
-        console.warn("Blockchain submission failed:", blockchainError.message);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error: ${response.status}`);
       }
-      
-      try {
-        const endpointResponse = await submitProposalToEndpoint(formData);
-        console.log("Endpoint submission result:", endpointResponse);
-        
-        setSuccess(true);
-        if (endpointResponse.isLocalOnly) {
-          setSubmitNote("Your proposal was saved locally due to server connectivity issues. It will be visible in the voting section immediately.");
-        } else {
-          setSubmitNote("Your proposal was successfully submitted! It will be visible in the voting section.");
-        }
-        
-        setFormData({
-          name: '',
-          emailId: '',
-          links: '',
-          title: '',
-          description: '',
-          briefSummary: '',
-          primaryGoal: '',
-          specificObjective: '',
-          budget: '',
-          longTermPlan: '',
-          futureFundingPlans: '',
-          stellarWalletAddress: ''
-        });
-        
-        setTouched({});
-        
-        setTimeout(() => {
-          navigate('/voting');
-        }, 3000);
-      } catch (endpointError) {
-        throw new Error(`Failed to submit proposal: ${endpointError.message}`);
-      }
+
+      setSuccess(true);
+      setSubmitNote("Your proposal was successfully submitted! It will be visible in the voting section.");
+      setFormData({
+        name: '',
+        emailId: '',
+        links: '',
+        title: '',
+        description: '',
+        briefSummary: '',
+        primaryGoal: '',
+        specificObjective: '',
+        budget: '',
+        longTermPlan: '',
+        futureFundingPlans: '',
+        stellarWalletAddress: ''
+      });
+      setTouched({});
+      setTimeout(() => {
+        navigate('/voting');
+      }, 3000);
+
     } catch (err) {
       setSubmitError(err.message || 'Failed to submit proposal');
     } finally {

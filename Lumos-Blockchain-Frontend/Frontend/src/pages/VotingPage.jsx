@@ -406,7 +406,11 @@ export default function VotingPage() {
       
       // Display success message
       setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setTimeout(() => {
+        setSuccess(false);
+        // Show a tooltip explaining that the vote is being processed on-chain
+        alert("Your vote has been submitted to the blockchain and will be reflected in the results soon. Blockchain transactions may take a few moments to process.");
+      }, 3000);
     } catch (error) {
       console.error("Error submitting vote:", error);
       setError(error.message || "Failed to submit vote");
