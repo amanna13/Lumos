@@ -31,14 +31,26 @@ public class GroqAPIClient {
             String prompt = buildPromptFromBatch(batch);
 
             JSONObject body = new JSONObject();
-            body.put("model", "gemma2-9b-it"); // or gemma2-9b-it
+            body.put("model", "meta-llama/llama-4-scout-17b-16e-instruct"); // meta-llama/llama-4-scout-17b-16e-instruct
             body.put("temperature", 1);
             body.put("max_tokens", 1024);
             body.put("top_p", 1);
             body.put("stream", false);
             JSONArray messages = new JSONArray();
 
-            messages.put(new JSONObject().put("role", "system").put("content", "You are an evaluator scoring grant proposals on the basis of clarity, feasibility, impact, innovation and total on a scale of 1 to 100. The total will be your overall thought of the marks you would give. Don't need to give explanation just give the scores" + " Return the result as a valid JSON array inside triple backticks: ```[ {...}, {...} ]```"));
+            messages.put(new JSONObject().put("role", "system")
+                    .put("content", "You are an expert proposals grant evaluator. Your role is to critically and objectively review the following sections of a project proposal and assign scores across key evaluation dimensions. Evaluate the proposal strictly based on the content provided, without making assumptions or requiring additional context. Use the following criteria:\n" +
+                            "\n" +
+                            "clarity (On a Scale of 1–100): Evaluate how clearly and coherently the proposal conveys its purpose, goals, and plan.\n" +
+                            "\n" +
+                            "feasibility (On a Scale of 1–100): Assess the practicality and likelihood of successful execution based on the proposed objectives and budget.\n" +
+                            "\n" +
+                            "impact (On a Scale of 1–100): Judge the potential significance and benefit of the project’s outcomes for its target audience or domain.\n" +
+                            "\n" +
+                            "innovation (On a Scale of 1–100): Consider the originality, creativity, and forward-thinking nature of the proposed idea or approach.\n" +
+                            "\n" +
+                            "total (On a Scale of 1–100): Provide a comprehensive overall score on a scale of 1 to 100 that reflects your holistic assessment of the entire proposal." + "\n\n" +
+                            "Respond in valid JSON array only inside triple backticks: ```[ {...}, {...} ]```    with no explanations or extra text"));
 
             messages.put(new JSONObject().put("role", "user").put("content", prompt));
 
@@ -65,7 +77,15 @@ public class GroqAPIClient {
         StringBuilder sb = new StringBuilder();
         int i = 1;
         for (Proposal p : batch) {
-            sb.append("Proposal ").append(i++).append(":\n").append("Title: ").append(p.getProjectTitle()).append("\n").append("Summary: ").append(p.getBrief_summary()).append("\n").append("Objective: ").append(p.getSpecificObjective()).append("\n\n");
+            sb.append("Proposal: ").append(p.getId()).append(":\n")
+                    .append("Title: ").append(p.getProjectTitle()).append("\n")
+                    .append("Project Description: ").append(p.getProjectDescription()).append("\n")
+                    .append("Summary: ").append(p.getBrief_summary()).append("\n")
+                    .append("Primary Goal: ").append(p.getPrimaryGoal()).append("\n")
+                    .append("Specific Objective: ").append(p.getSpecificObjective()).append("\n\n")
+                    .append("Budget: ").append(p.getBudget().toString()).append("\n")
+                    .append("Long Term Plan: ").append(p.getLongTermPlan()).append("\n")
+                    .append("Future Funding Plans: ").append(p.getFutureFundingPlans()).append("\n\n");
         }
         sb.append("Please return JSON like this: [{proposalId:..., score: {clarity:..., feasibility:...,impact ..., innovation:..., total:...}}]");
         return sb.toString();
@@ -77,8 +97,7 @@ public class GroqAPIClient {
             // Assumes the Groq LLM returns a clean JSON array of objects
             String content = new JSONObject(body).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
 
-
-            System.out.println("🔍 Raw Groq content:\n" + content);
+//            System.out.println("🔍 Raw Groq content:\n" + content);
 
             String jsonArrayText = extractJsonBlock(content);
             JSONArray results = new JSONArray(jsonArrayText);
@@ -88,10 +107,12 @@ public class GroqAPIClient {
                 ProposalScore score = new ProposalScore();
 
                 String label = entry.get("proposalId").toString().trim();
-                int index = Integer.parseInt(label.replace("Proposal ", "")) - 1;
-                score.setProposalId(batch.get(index).getId());
+//                int index = Integer.parseInt(label.replace("Proposal", "")) - 1;
+//                long proposalId = Long.parseLong(label.replace("Proposal", "").trim());
+                score.setProposalId(label);
+//                score.setProposalId(batch.get(index).getId());
 
-                score.setEvaluatedAt(Instant.now());
+//                score.setEvaluatedAt(Instant.now());
 
                 JSONObject scoreJson = entry.getJSONObject("score");
                 Score s = new Score();
@@ -125,7 +146,7 @@ public class GroqAPIClient {
             return content.substring(start + offset, end).trim();
         }
 
-        throw new RuntimeException("❌ Could not find JSON block in Groq response:\n" + content);
+        throw new RuntimeException("Could not find JSON block in Groq response:\n" + content);
     }
 
 }

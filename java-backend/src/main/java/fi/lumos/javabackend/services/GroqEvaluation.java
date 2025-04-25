@@ -43,7 +43,7 @@ public class GroqEvaluation {
         proposalScoreRepository.saveAll(scores);
 
         int finished = completed.incrementAndGet();
-        int progress = (int) (((double) completed.incrementAndGet() / total) * 100);
+        int progress = (int) (((double) finished / total) * 100);
         progressSender.sendProgress(progress);
 
         if (finished == total) {
