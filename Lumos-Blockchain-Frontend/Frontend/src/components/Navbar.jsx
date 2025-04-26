@@ -28,9 +28,20 @@ export default function Navbar() {
   const formattedAccount = account ? `${account.substring(0, 6)}...${account.substring(account.length - 4)}` : ''
   
   return (
-    <nav className="bg-white shadow-sm dark:bg-slate-800 sticky top-0 z-50">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+    <nav
+      className="backdrop-blur-md bg-white/40 dark:bg-slate-800/40 shadow-lg rounded-2xl border border-slate-200 dark:border-slate-700 mx-auto mt-4 max-w-3xl flex justify-center items-center z-50"
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        top: 0,
+        marginLeft: 'auto',
+        marginRight: 'auto',
+        // Ensure the navbar overlays content but allows for offset
+      }}
+    >
+      <div className="w-full container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16 items-center">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
               <Link to="/" className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">

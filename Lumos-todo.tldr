@@ -198,6 +198,23 @@
 											"content": [
 												{
 													"type": "text",
+													"text": "add mail sending system for winners"
+												}
+											]
+										}
+									]
+								},
+								{
+									"type": "listItem",
+									"content": [
+										{
+											"type": "paragraph",
+											"attrs": {
+												"dir": "auto"
+											},
+											"content": [
+												{
+													"type": "text",
 													"marks": [
 														{
 															"type": "highlight"
@@ -282,9 +299,9 @@
 		{
 			"id": "pointer:pointer",
 			"typeName": "pointer",
-			"x": 898.1205580887249,
-			"y": 313.88768765489857,
-			"lastActivityTimestamp": 1745603367987,
+			"x": 858.2888354294748,
+			"y": 255.57693485044325,
+			"lastActivityTimestamp": 1745605479144,
 			"meta": {}
 		},
 		{
@@ -304,7 +321,7 @@
 			"screenBounds": {
 				"x": 0,
 				"y": 0,
-				"w": 893.7499389648438,
+				"w": 663.1943969726562,
 				"h": 372.9166564941406
 			},
 			"insets": [

@@ -107,7 +107,7 @@ export default function HomePage() {
   const showDebugElements = false;
   
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="pt-20 flex flex-col min-h-screen">
       {/* Hero Section - Completely Redesigned */}
       <section className="relative bg-gradient-to-br from-slate-900 to-indigo-950 overflow-hidden min-h-[90vh] flex items-center">
         {/* Animated blockchain grid background */}
@@ -321,7 +321,7 @@ export default function HomePage() {
                   <p className="text-lg text-slate-600 dark:text-slate-300 max-w-2xl mb-4">
                     {currentPhase === "Submission" && "Share your innovative vision with the community and apply for grant funding."}
                     {currentPhase === "Voting" && "Explore proposals and vote for projects you believe deserve funding."}
-                    {currentPhase === "GroqCheck" && "Groq AI evaluates all submissions and shortlists the top 20 proposals based on impact, viability, and innovation."}
+                    {currentPhase === "GroqCheck" && "Groq AI evaluates all submissions and shortlists the top 10 proposals based on impact, viability, and innovation."}
                     {currentPhase === "Completed" && "The funding process has concluded. View the final results."}
                   </p>
                 </div>
@@ -383,7 +383,7 @@ export default function HomePage() {
                   className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-xl transform hover:-translate-y-1 active:translate-y-0 w-full sm:w-auto"
                 >
                   <div className="flex items-center justify-center">
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" xmlns="http://www.w3.org/2000/svg">
                       {currentPhase === "Submission" && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />}
                       {currentPhase === "GroqCheck" && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 12a2 2 0 100-4 2 2 0 000 4zm-6 8a6 6 0 1112 0H4z" />}
                       {currentPhase === "Voting" && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />}
@@ -642,12 +642,9 @@ export default function HomePage() {
           </div>
           
           <div className="relative mt-20">
-            {/* Progress line */}
-            <div className="hidden md:block absolute top-24 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 transform z-0"></div>
-            
             <div className="grid grid-cols-1 md:grid-cols-4 gap-16 relative z-10">
               {/* Phase 1 */}
-              <div className="process-card flex flex-col items-center text-center">
+              <div className="process-card flex flex-col items-center text-center relative">
                 <div className={`relative w-20 h-20 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-8 border-4 ${currentPhase === "Submission" ? "border-indigo-500 shadow-indigo" : "border-slate-200 dark:border-slate-600"} transition-all duration-300 hover:scale-110`}>
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center ${currentPhase === "Submission" ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300"}`}>
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -658,6 +655,17 @@ export default function HomePage() {
                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white dark:border-slate-800"></span>
                   )}
                 </div>
+                
+                {/* Progress bar for Submission phase */}
+                {currentPhase === "Submission" && (
+                  <div className="w-full flex items-center justify-center mt-4 mb-2">
+                    <svg className="w-7 h-7 mr-2 text-indigo-500 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <circle cx="12" cy="12" r="10" strokeWidth="2" className="opacity-30" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83M6.93 17.07l-2.83 2.83m0-16.97l2.83 2.83M17.07 17.07l2.83 2.83" />
+                    </svg>
+                    <div className="flex-1 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg"></div>
+                  </div>
+                )}
                 
                 <h3 className={`text-2xl font-bold mb-4 ${currentPhase === "Submission" ? "text-indigo-600 dark:text-indigo-400" : ""}`}>
                   Submission Phase
@@ -683,7 +691,7 @@ export default function HomePage() {
               </div>
               
               {/* Phase 2 */}
-              <div className="process-card flex flex-col items-center text-center">
+              <div className="process-card flex flex-col items-center text-center relative">
                 <div className={`relative w-20 h-20 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-8 border-4 ${currentPhase === "GroqCheck" ? "border-indigo-500 shadow-indigo" : "border-slate-200 dark:border-slate-600"} transition-all duration-300 hover:scale-110`}>
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center ${currentPhase === "GroqCheck" ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300"}`}>
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -695,13 +703,24 @@ export default function HomePage() {
                   )}
                 </div>
                 
+                {/* Progress bar for GroqCheck phase */}
+                {currentPhase === "GroqCheck" && (
+                  <div className="w-full flex items-center justify-center mt-4 mb-2">
+                    <svg className="w-7 h-7 mr-2 text-indigo-500 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <circle cx="12" cy="12" r="10" strokeWidth="2" className="opacity-30" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83M6.93 17.07l-2.83 2.83m0-16.97l2.83 2.83M17.07 17.07l2.83 2.83" />
+                    </svg>
+                    <div className="flex-1 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg"></div>
+                  </div>
+                )}
+                
                 <h3 className={`text-2xl font-bold mb-4 ${currentPhase === "GroqCheck" ? "text-indigo-600 dark:text-indigo-400" : ""}`}>
                   Groq Check Phase
                 </h3>
                 
                 <div className={`rounded-xl p-6 h-full ${currentPhase === "GroqCheck" ? "bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-500" : "bg-slate-50 dark:bg-slate-700/30 border-l-4 border-transparent"}`}>
                   <p className="text-slate-600 dark:text-slate-300 mb-4">
-                    Groq AI evaluates all submissions and shortlists the top 20 proposals based on impact, viability, and innovation.
+                    Groq AI evaluates all submissions and shortlists the top 10 proposals based on impact, viability, and innovation.
                   </p>
                   
                   {currentPhase === "GroqCheck" && (
@@ -719,7 +738,7 @@ export default function HomePage() {
               </div>
               
               {/* Phase 3 */}
-              <div className="process-card flex flex-col items-center text-center">
+              <div className="process-card flex flex-col items-center text-center relative">
                 <div className={`relative w-20 h-20 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-8 border-4 ${currentPhase === "Voting" ? "border-indigo-500 shadow-indigo" : "border-slate-200 dark:border-slate-600"} transition-all duration-300 hover:scale-110`}>
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center ${currentPhase === "Voting" ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300"}`}>
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -730,6 +749,17 @@ export default function HomePage() {
                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white dark:border-slate-800"></span>
                   )}
                 </div>
+                
+                {/* Progress bar for Voting phase */}
+                {currentPhase === "Voting" && (
+                  <div className="w-full flex items-center justify-center mt-4 mb-2">
+                    <svg className="w-7 h-7 mr-2 text-indigo-500 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <circle cx="12" cy="12" r="10" strokeWidth="2" className="opacity-30" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83M6.93 17.07l-2.83 2.83m0-16.97l2.83 2.83M17.07 17.07l2.83 2.83" />
+                    </svg>
+                    <div className="flex-1 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg"></div>
+                  </div>
+                )}
                 
                 <h3 className={`text-2xl font-bold mb-4 ${currentPhase === "Voting" ? "text-indigo-600 dark:text-indigo-400" : ""}`}>
                   Voting Phase
@@ -755,7 +785,7 @@ export default function HomePage() {
               </div>
               
               {/* Phase 4 */}
-              <div className="process-card flex flex-col items-center text-center">
+              <div className="process-card flex flex-col items-center text-center relative">
                 <div className={`relative w-20 h-20 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-8 border-4 ${currentPhase === "Completed" ? "border-indigo-500 shadow-indigo" : "border-slate-200 dark:border-slate-600"} transition-all duration-300 hover:scale-110`}>
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center ${currentPhase === "Completed" ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300"}`}>
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -766,6 +796,17 @@ export default function HomePage() {
                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white dark:border-slate-800"></span>
                   )}
                 </div>
+                
+                {/* Progress bar for Completed phase */}
+                {currentPhase === "Completed" && (
+                  <div className="w-full flex items-center justify-center mt-4 mb-2">
+                    <svg className="w-7 h-7 mr-2 text-indigo-500 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <circle cx="12" cy="12" r="10" strokeWidth="2" className="opacity-30" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83M6.93 17.07l-2.83 2.83m0-16.97l2.83 2.83M17.07 17.07l2.83 2.83" />
+                    </svg>
+                    <div className="flex-1 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg"></div>
+                  </div>
+                )}
                 
                 <h3 className={`text-2xl font-bold mb-4 ${currentPhase === "Completed" ? "text-indigo-600 dark:text-indigo-400" : ""}`}>
                   Results Phase
