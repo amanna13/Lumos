@@ -54,10 +54,10 @@ Groq AI and Llama 70B Model: Initially, ranking proposals using AI was a challen
 
 ### Core Technologies Used:
 - Frontend: Ether Js, React Js
-- Backend: Solidity, Hardhat, Java, Springboot, Maven
+- Backend: Solidity, Hardhat, Java, Springboot, Apache Maven
 - Database: MongoDB
 - APIs: REST API
-- Hosting: Render
+- Backend Hosting: Render
 
 ### Sponsor Technologies Used (if any):
 - [✅] **Groq:** _How you used Groq_   
@@ -86,16 +86,16 @@ Add images, GIFs, or screenshots if helpful!
 
 ## 📽️ Demo & Deliverables
 
-- **Demo Video Link:** [Paste YouTube or Loom link here]  
+- **Demo Video Link:** https://youtu.be/yetNS_lMhZ0 
 - **Pitch Deck / PPT Link:** [Paste Google Slides / PDF link here]  
 
 ---
 
 ## ✅ Tasks & Bonus Checklist
 
-- [ ] **All members of the team completed the mandatory task - Followed at least 2 of our social channels and filled the form** (Details in Participant Manual)  
-- [ ] **All members of the team completed Bonus Task 1 - Sharing of Badges and filled the form (2 points)**  (Details in Participant Manual)
-- [ ] **All members of the team completed Bonus Task 2 - Signing up for Sprint.dev and filled the form (3 points)**  (Details in Participant Manual)
+- [✅] **All members of the team completed the mandatory task - Followed at least 2 of our social channels and filled the form** (Details in Participant Manual)  
+- [✅] **All members of the team completed Bonus Task 1 - Sharing of Badges and filled the form (2 points)**  (Details in Participant Manual)
+- [✅] **All members of the team completed Bonus Task 2 - Signing up for Sprint.dev and filled the form (3 points)**  (Details in Participant Manual)
 
 *(Mark with ✅ if completed)*
 
@@ -118,12 +118,13 @@ cd Lumos-Blockchain-Frontend
 cd Frontend
 npm install
 
-#Run the Backend on deployed:
+#Backend deployed on RENDER:
 https://lumos-mz9a.onrender.com
 
 #API Endpoint:
-/proposal/allproposals
-/evaluation/rankings/top
+GET - /proposal/allproposals
+GET - /evaluation/rankings/top
+
 
 
 # Start development server
@@ -154,7 +155,7 @@ Integration with fiat-to-crypto gateways to allow users from different regions t
 
 ## 📎 Resources / Credits
 
-- Ollama LLM Model
+- Groq Docs, BASE Docs, Stellar Docs, RENDER
 
 ---
 
