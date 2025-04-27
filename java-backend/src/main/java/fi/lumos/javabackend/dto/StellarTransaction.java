@@ -10,4 +10,7 @@ import lombok.NoArgsConstructor;
 public class StellarTransaction {
     private String recipient;
     private String amount;
+    private String recipientMail;
+    private String recipientName;
+    private String projectTitle;
 }
