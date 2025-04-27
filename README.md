@@ -60,9 +60,9 @@ Groq AI and Llama 70B Model: Initially, ranking proposals using AI was a challen
 - Backend Hosting: Render
 
 ### Sponsor Technologies Used (if any):
-- [✅] **Groq:** _How you used Groq_   
-- [✅] **Base:** _AgentKit / OnchainKit / Smart Wallet usage_  
-- [✅] **Stellar:** _Payments, identity, or token usage_
+- [✅] **Groq:**  
+- [✅] **Base:** 
+- [✅] **Stellar:** 
 ---
 
 ## ✨ Key Features
@@ -151,6 +151,7 @@ Regular security audits and bug bounty programs to ensure continuous security of
 Support for multiple languages to make the platform accessible to a global audience.
 Mobile app development for better accessibility on mobile devices.
 Integration with fiat-to-crypto gateways to allow users from different regions to interact with the platform easily.
+
 ---
 
 ## 📎 Resources / Credits
