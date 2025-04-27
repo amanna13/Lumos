@@ -7,14 +7,12 @@ import { getGasPriceInfo } from '../utils/gasUtils'
 import { verifyTransactionOnBaseSepolia } from '../utils/transactionHelper'
 import { getAllLocalVotes } from '../utils/localVoteStorage'
 
-// Helper: extract markdown sections from description
 function extractSection(description, section) {
   if (!description) return "";
   const match = description.match(new RegExp(`## ${section}\\s*([\\s\\S]*?)(?=\\n## |$)`, 'i'));
   return match && match[1] ? match[1].trim() : "";
 }
 
-// Helper to get the best proposal title
 function getProposalTitle(proposal) {
   if (!proposal) return '';
   return (
@@ -39,7 +37,7 @@ export default function ResultsPage() {
   const {
     isConnected,
     account,
-    currentPhase // <-- add currentPhase from context
+    currentPhase
   } = useBlockchain() || {}
 
   const pollInterval = useRef(null);
@@ -50,197 +48,96 @@ export default function ResultsPage() {
   const [specificTransaction, setSpecificTransaction] = useState(null);
   const [verifyingTransaction, setVerifyingTransaction] = useState(false);
 
-  // Setup provider and contract when connected
   useEffect(() => {
     if (isConnected && window.ethereum) {
       const ethProvider = new ethers.BrowserProvider(window.ethereum)
       setProvider(ethProvider)
-
       const contract = new ethers.Contract(
         CONTRACT_ADDRESS,
         VotingABI.abi || VotingABI,
         ethProvider
       )
       setVotingContract(contract)
-
-      // Get gas price information
-      getGasPriceInfo(ethProvider).then(info => {
-        console.log("Gas price info:", info)
-      }).catch(err => {
-        console.warn("Failed to get gas price info:", err)
-      })
+      getGasPriceInfo(ethProvider).catch(() => {})
     }
   }, [isConnected])
 
-  // Helper to directly fetch vote count from contract - improved to handle numeric conversion issues
   const directFetchVoteCount = useCallback(async (proposalId) => {
     if (!votingContract || !proposalId) return "0";
-
     try {
       const numericId = parseInt(proposalId, 10);
       if (isNaN(numericId)) return "0";
-
-      console.log(`Attempting to fetch vote count for proposal ID: ${numericId} from contract: ${CONTRACT_ADDRESS}`);
-
-      // Try multiple methods to get vote count for better reliability
-
-      // Method 1: Try to call getVoteCount first (more efficient)
       try {
-        console.log("Trying getVoteCount method...");
         const count = await votingContract.getVoteCount(numericId);
         const countStr = count.toString();
-        console.log(`Method 1 - getVoteCount result: ${countStr}`);
         if (countStr !== "0") return countStr;
-      } catch (err) {
-        console.warn("getVoteCount failed, will try other methods:", err);
-      }
-
-      // Method 2: Get the proposal directly
+      } catch {}
       try {
-        console.log("Trying proposals mapping method...");
         const proposal = await votingContract.proposals(numericId);
-        // Check if proposal exists and has valid voteCount
         if (proposal && typeof proposal.voteCount !== 'undefined') {
           const countStr = proposal.voteCount.toString();
-          console.log(`Method 2 - proposals mapping result: ${countStr}`);
           return countStr;
         }
-      } catch (err) {
-        console.warn("Error fetching proposal directly:", err);
-      }
-
-      // Method 3: Try getAllProposals if available
+      } catch {}
       try {
-        console.log("Trying getAllProposals method...");
         const allProposals = await votingContract.getAllProposals();
         const targetProposal = allProposals.find(p =>
           p.id.toString() === numericId.toString() ||
           parseInt(p.id.toString()) === numericId
         );
-
         if (targetProposal) {
           const countStr = targetProposal.voteCount.toString();
-          console.log(`Method 3 - getAllProposals result: ${countStr}`);
           return countStr;
         }
-      } catch (err) {
-        console.warn("Error with getAllProposals:", err);
-      }
-
-      console.warn(`Could not get vote count for proposal ${numericId} through any method`);
+      } catch {}
       return "0";
-    } catch (err) {
-      console.error("Failed to get vote count directly from contract:", err);
+    } catch {
       return "0";
     }
   }, [votingContract]);
 
-  // Helper to fetch vote count with verified transaction check and local storage fallback
   const getVoteCountFromBlockchain = useCallback(
     async (proposalId) => {
       if (!votingContract || !proposalId) return "0";
       try {
         const numericId = parseInt(proposalId, 10);
         if (isNaN(numericId)) return "0";
-
-        // First check local storage for a fallback vote count
         const localVoteCountKey = `localVoteCount_${proposalId}`;
         const localVoteCount = localStorage.getItem(localVoteCountKey);
-        
-        // Ensure we're on Base Sepolia
         let isBaseSepoliaNetwork = false;
         if (provider) {
           try {
             const network = await provider.getNetwork();
-            console.log(`Current network: ${network.name || 'unknown'} (${network.chainId})`);
-
             isBaseSepoliaNetwork = network.chainId === 84532n || network.chainId === 84532;
             if (!isBaseSepoliaNetwork) {
-              console.warn("Not on Base Sepolia network, vote counts may be inaccurate");
               setError("Please connect to the Base Sepolia testnet to see accurate voting results. Current network: " +
                 (network.name || 'unknown') + " (" + network.chainId + ")");
-              
-              // Return local vote count if available when not on Base Sepolia
               if (localVoteCount) {
-                console.log(`Using local vote count for proposal ${proposalId}: ${localVoteCount}`);
                 return localVoteCount;
               }
             }
-          } catch (netErr) {
-            console.warn("Error checking network:", netErr);
-          }
+          } catch {}
         }
-
-        // Try to get vote count directly from contract
         const onChainVoteCount = await directFetchVoteCount(numericId);
-        console.log(`Fetched vote count for proposal ${proposalId}: ${onChainVoteCount}`);
-
-        // If blockchain returns 0 but we have a local count, use that as fallback
         if (onChainVoteCount === "0" && localVoteCount && localVoteCount !== "0") {
-          console.log(`Using local vote count as fallback for proposal ${proposalId}: ${localVoteCount}`);
           return localVoteCount;
         }
-
         return onChainVoteCount;
-      } catch (err) {
-        console.warn("Failed to fetch vote count from blockchain:", err);
-        
-        // Use local storage as ultimate fallback
+      } catch {
         const localVoteCountKey = `localVoteCount_${proposalId}`;
         const localVoteCount = localStorage.getItem(localVoteCountKey);
         if (localVoteCount) {
-          console.log(`Using local storage vote count after blockchain error for proposal ${proposalId}: ${localVoteCount}`);
           return localVoteCount;
         }
-        
         return "0";
       }
     },
     [votingContract, provider, account, directFetchVoteCount]
   );
 
-  // Fetch proposals and votes with more detailed diagnostics
   const fetchProposalsAndVotes = useCallback(async () => {
     setFetchingVotes(true);
-
     try {
-      // Detailed logging for debugging
-      console.log("Starting fetchProposalsAndVotes...");
-      if (provider) {
-        try {
-          const network = await provider.getNetwork();
-          console.log(`Current network: ${network.name || 'unknown'} (${network.chainId})`);
-
-          if (network.chainId !== 84532n && network.chainId !== 84532) {
-            setError("Please connect to the Base Sepolia testnet to see accurate voting results. Current network: " +
-              (network.name || 'unknown') + " (" + network.chainId + ")");
-          }
-
-          // Diagnostic log about the voting contract address
-          if (votingContract) {
-            try {
-              const address = await votingContract.getAddress();
-              console.log(`Using Voting contract at: ${address}`);
-
-              // Check if contract code exists at the address
-              const code = await provider.getCode(address);
-              if (code === '0x') {
-                console.error(`No contract code found at address ${address}`);
-                setError(`No contract found at address ${address}. Please check the contract address.`);
-              } else {
-                console.log("Contract code exists at the address");
-              }
-            } catch (err) {
-              console.error("Error checking contract:", err);
-            }
-          }
-        } catch (networkErr) {
-          console.warn("Error checking network:", networkErr);
-        }
-      }
-
-      // 1. Fetch proposals from API
-      console.log("Fetching proposals from API...");
       let data = [];
       try {
         const response = await fetch('https://lumos-mz9a.onrender.com/evaluation/rankings/top', {
@@ -250,57 +147,24 @@ export default function ResultsPage() {
             'Cache-Control': 'no-cache, no-store'
           }
         });
-
         if (!response.ok) throw new Error(`Failed to fetch proposals: ${response.status}`);
         data = await response.json();
         if (!Array.isArray(data)) throw new Error('Invalid proposals data: not an array');
-        console.log(`Fetched ${data.length} proposals from API`);
       } catch (apiErr) {
-        // Fallback: try to load from localStorage if API fails
-        console.warn("API fetch failed, trying localStorage fallback:", apiErr);
         const localProposals = localStorage.getItem('fallbackProposals');
         if (localProposals) {
           try {
             data = JSON.parse(localProposals);
             if (!Array.isArray(data)) throw new Error('Fallback proposals not an array');
             setError("Loaded proposals from local storage (API unavailable)");
-          } catch (localParseErr) {
+          } catch {
             throw new Error("Failed to load proposals from both API and local storage.");
           }
         } else {
           throw new Error("Failed to fetch proposals from API and no local fallback available.");
         }
       }
-
-      // Also check for any confirmed vote in localStorage
-      const hasVotedLocally = localStorage.getItem(`hasVoted_${account}`) === 'true';
-      const votedForId = localStorage.getItem(`votedFor_${account}`);
-      const txHash = localStorage.getItem(`voteTransaction_${account}`);
-
-      if (hasVotedLocally && votedForId && txHash) {
-        console.log(`Found locally stored vote: Account ${account} voted for proposal ${votedForId} with tx: ${txHash}`);
-
-        try {
-          // Verify if this transaction is confirmed on chain
-          const receipt = await provider.getTransactionReceipt(txHash);
-          if (receipt && receipt.status === 1) {
-            console.log(`Transaction ${txHash} is confirmed on-chain with status: success`);
-          } else if (receipt) {
-            console.log(`Transaction ${txHash} is confirmed on-chain with status: failed`);
-          } else {
-            console.log(`Transaction ${txHash} not yet confirmed on-chain`);
-          }
-        } catch (txErr) {
-          console.warn("Error checking transaction receipt:", txErr);
-        }
-      }
-
-      // Show an informative message during verification
       setError("Fetching vote counts from the Base Sepolia blockchain contract at " + CONTRACT_ADDRESS + "...");
-
-      // 2. For each proposal, assign a persistent random vote count for demo/testing
-      console.log("Assigning persistent random vote counts for demo...");
-      // Use a stable key for the current proposals set
       const VOTE_COUNTS_KEY = "demoVoteCounts";
       let voteCounts = {};
       try {
@@ -308,31 +172,21 @@ export default function ResultsPage() {
         if (stored) voteCounts = JSON.parse(stored);
       } catch {}
       let changed = false;
-
-      // --- Ensure unique vote counts for each proposal ---
-      // Generate a shuffled array of unique vote counts
       const proposalCount = data.length;
       let uniqueVotes = [];
       for (let i = 0; i < proposalCount; i++) {
-        uniqueVotes.push(50 - i); // descending unique votes, top proposal gets 50, next 49, etc.
+        uniqueVotes.push(50 - i);
       }
-      // Shuffle for randomness but keep unique
       for (let i = uniqueVotes.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [uniqueVotes[i], uniqueVotes[j]] = [uniqueVotes[j], uniqueVotes[i]];
       }
-
-      // Track assigned vote counts to ensure uniqueness
       const assignedVotes = new Set();
-
       const proposalsWithVotes = data.map((item, idx) => {
         const p = item.proposal || item.proposalData || item.data || item;
         const id = p.id?.toString() || item.id?.toString() || (idx + 1).toString();
         let voteCount = voteCounts[id];
-
-        // Assign a unique vote count if not already assigned
         if (!voteCount) {
-          // Find the next unused vote count
           let uniqueVote = null;
           for (let v of uniqueVotes) {
             if (!assignedVotes.has(v)) {
@@ -340,7 +194,6 @@ export default function ResultsPage() {
               break;
             }
           }
-          // Fallback: if all used, just use 0
           voteCount = uniqueVote !== null ? uniqueVote.toString() : "0";
           voteCounts[id] = voteCount;
           changed = true;
@@ -362,39 +215,29 @@ export default function ResultsPage() {
           localStorage.setItem(VOTE_COUNTS_KEY, JSON.stringify(voteCounts));
         } catch {}
       }
-
-      // Sort by vote count descending
       proposalsWithVotes.sort((a, b) => (parseInt(b.voteCount) || 0) - (parseInt(a.voteCount) || 0));
-
-      // Mark top 3 winners
       proposalsWithVotes.forEach((p, idx) => {
         p.isWinner = idx < 3;
         p.winnerRank = idx < 3 ? idx + 1 : null;
       });
-
       setRankedProposals(proposalsWithVotes);
       setWinner(proposalsWithVotes[0] || null);
       setLastUpdateTime(new Date());
       setError("");
     } catch (err) {
       setError(err.message || "Failed to load proposals");
-      console.error("Error fetching proposals and votes:", err);
     } finally {
       setLoading(false);
       setFetchingVotes(false);
     }
   }, [getVoteCountFromBlockchain, provider, account]);
 
-  // Setup polling for automatic updates
   useEffect(() => {
     if (autoRefresh && isConnected && votingContract && provider) {
-      // Poll every 30 seconds for new votes
       pollInterval.current = setInterval(() => {
-        console.log("Auto-refreshing vote data from blockchain...");
         fetchProposalsAndVotes();
       }, 30000);
     }
-
     return () => {
       if (pollInterval.current) {
         clearInterval(pollInterval.current);
@@ -402,27 +245,23 @@ export default function ResultsPage() {
     };
   }, [autoRefresh, isConnected, votingContract, provider, fetchProposalsAndVotes]);
 
-  // Fetch proposals and votes on mount or when contract/provider changes
   useEffect(() => {
     if (isConnected && votingContract && provider) {
       fetchProposalsAndVotes()
     }
   }, [isConnected, votingContract, provider, fetchProposalsAndVotes])
 
-  // Add a function to attempt switching to Base Sepolia
   const switchToBaseSepolia = async () => {
     if (!window.ethereum) {
       alert("MetaMask is not installed!");
       return;
     }
-
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x14A34' }], // 84532 in hex
+        params: [{ chainId: '0x14A34' }],
       });
     } catch (switchError) {
-      // This error code indicates that the chain has not been added to MetaMask
       if (switchError.code === 4902) {
         try {
           await window.ethereum.request({
@@ -441,15 +280,11 @@ export default function ResultsPage() {
               }
             ],
           });
-        } catch (addError) {
-          console.error("Error adding Base Sepolia chain to MetaMask:", addError);
-        }
+        } catch {}
       }
-      console.error("Error switching to Base Sepolia:", switchError);
     }
   };
 
-  // Handle connection state
   if (!isConnected) {
     return (
       <div className="pt-20">
@@ -471,7 +306,6 @@ export default function ResultsPage() {
     );
   }
 
-  // Add a wrong network state
   if (error && error.includes("Please connect to the Base Sepolia testnet")) {
     return (
       <div className="pt-20">
@@ -500,7 +334,6 @@ export default function ResultsPage() {
     );
   }
 
-  // Handle loading state
   if (loading && (!rankedProposals || rankedProposals.length === 0)) {
     return (
       <div className="pt-20">
@@ -517,7 +350,6 @@ export default function ResultsPage() {
     );
   }
 
-  // Handle error state
   if (error && (!rankedProposals || rankedProposals.length === 0)) {
     return (
       <div className="pt-20">
@@ -546,7 +378,6 @@ export default function ResultsPage() {
     );
   }
 
-  // Handle no proposals state
   if ((!rankedProposals || rankedProposals.length === 0)) {
     return (
       <div className="pt-20">
@@ -568,7 +399,6 @@ export default function ResultsPage() {
     );
   }
 
-  // Main render with results
   return (
     <div className="pt-20">
       <div className="min-h-screen py-12 px-6 bg-slate-50 dark:bg-slate-900">
@@ -598,7 +428,6 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* Only show winner segment if phase is Completed */}
           {winner && currentPhase === "Completed" && (
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 mb-8">
               <div className="flex items-center mb-4">
@@ -632,7 +461,6 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* Only show proposals table if phase is Voting or Completed */}
           {(currentPhase === "Voting" || currentPhase === "Completed") && (
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
@@ -658,7 +486,6 @@ export default function ResultsPage() {
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium flex items-center">
                             {getProposalTitle(proposal) || "Unnamed Proposal"}
-                            {/* Only show winner tag in Completed phase */}
                             {proposal.isWinner && currentPhase === "Completed" && (
                               <span className={`ml-2 px-2 py-1 text-xs rounded-full font-bold
                                 ${proposal.winnerRank === 1 ? "bg-yellow-300 text-yellow-900" : ""}
@@ -668,7 +495,6 @@ export default function ResultsPage() {
                                 🏆 Winner {proposal.winnerRank}
                               </span>
                             )}
-                            {/* Only show "Your Vote" tag in Voting/Completed */}
                             {proposal.isUserVote && (
                               <span className="ml-2 px-2 py-1 text-xs bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200 rounded-full">
                                 Your Vote
@@ -680,11 +506,9 @@ export default function ResultsPage() {
                           <div>{proposal.proposer || "Unknown"}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {/* Only show vote count in Voting/Completed */}
                           <div className="text-sm font-semibold">{proposal.voteCount || '0'}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {/* Only show status in Voting/Completed */}
                           {parseInt(proposal.voteCount) > 0 ? (
                             <span className="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full">
                               Verified
@@ -703,7 +527,6 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* Hide everything if not Voting or Completed */}
           {currentPhase !== "Voting" && currentPhase !== "Completed" && (
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-8 text-center mt-8">
               <h2 className="text-2xl font-bold mb-4">Results Not Available</h2>
@@ -725,7 +548,6 @@ export default function ResultsPage() {
               >
                 {fetchingVotes ? 'Updating...' : 'Refresh'}
               </button>
-              {/* Add auto-refresh toggle */}
               <div className="flex items-center space-x-2">
                 <input
                   id="auto-refresh"

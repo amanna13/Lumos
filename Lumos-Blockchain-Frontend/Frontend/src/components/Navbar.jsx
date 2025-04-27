@@ -37,7 +37,6 @@ export default function Navbar() {
         top: 0,
         marginLeft: 'auto',
         marginRight: 'auto',
-        // Ensure the navbar overlays content but allows for offset
       }}
     >
       <div className="w-full container mx-auto px-4 sm:px-6 lg:px-8">
