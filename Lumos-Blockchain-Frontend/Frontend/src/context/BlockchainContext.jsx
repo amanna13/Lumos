@@ -224,43 +224,101 @@ export function BlockchainProvider({ children }) {
     }
   };
 
+  // Reset all votes (admin function)
   const resetAllVotes = async () => {
-    if (!isAdmin) {
-      return { success: false, message: "Admin privileges required" };
+    if (!isConnected || !signer) {
+      throw new Error("Wallet not connected");
     }
 
     try {
-      const voteKeys = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('hasVoted_') || key.startsWith('votedFor_'))) {
-          voteKeys.push(key);
-        }
-      }
-
-      voteKeys.forEach(key => localStorage.removeItem(key));
-
+      // First, try direct contract call
+      const contract = new ethers.Contract(
+        votingContractAddress,
+        VotingABI.abi || VotingABI,
+        signer
+      );
+      
+      // Log available functions to debug
+      console.log("Available functions:", Object.keys(contract.interface.functions));
+      
+      // Try multiple possible function names
       try {
-        const response = await fetch('https://lumos-mz9a.onrender.com/proposals/resetAllVotes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            admin: account,
-            timestamp: Date.now()
-          })
-        });
-
-        if (!response.ok) {
-          console.warn("Server reset all votes failed, but local storage cleared");
+        console.log("Trying resetAllVotes on contract");
+        if (typeof contract.resetAllVotes === 'function') {
+          const tx = await contract.resetAllVotes();
+          console.log("Reset transaction sent:", tx.hash);
+          const receipt = await tx.wait();
+          console.log("Reset transaction confirmed:", receipt);
+          return { success: true, message: "Votes reset successfully via blockchain" };
+        } else {
+          throw new Error("resetAllVotes function not available");
         }
-      } catch (apiError) {
-        console.warn("API reset all votes error:", apiError);
+      } catch (resetErr) {
+        console.warn("Standard reset failed:", resetErr);
+        
+        try {
+          console.log("Trying adminResetAllVotes fallback");
+          if (typeof contract.adminResetAllVotes === 'function') {
+            const tx = await contract.adminResetAllVotes();
+            console.log("Admin reset transaction sent:", tx.hash);
+            const receipt = await tx.wait();
+            console.log("Admin reset transaction confirmed:", receipt);
+            return { success: true, message: "Votes reset successfully via admin function" };
+          } else {
+            throw new Error("adminResetAllVotes function not available");
+          }
+        } catch (adminErr) {
+          console.warn("Admin function also failed:", adminErr);
+          
+          // Last resort - try invoking a function by name directly
+          try {
+            // Check if we need to manually construct a function call
+            const functionSignature = Object.keys(contract.interface.functions)
+              .find(fn => fn.includes("reset") && fn.includes("Vote"));
+              
+            if (functionSignature) {
+              console.log("Found reset function:", functionSignature);
+              const tx = await contract[functionSignature.split('(')[0]]();
+              const receipt = await tx.wait();
+              return { success: true, message: `Votes reset using ${functionSignature}` };
+            } else {
+              throw new Error("No reset function found in contract");
+            }
+          } catch (fallbackErr) {
+            console.error("All contract methods failed:", fallbackErr);
+            throw fallbackErr;
+          }
+        }
       }
-
-      return { success: true };
     } catch (err) {
-      console.error("Reset all votes error:", err);
-      return { success: false, message: err.message || "Failed to reset all votes" };
+      console.error("Contract reset error:", err);
+      
+      // Manual local storage reset as fallback
+      try {
+        // Clear the vote for the current account
+        localStorage.removeItem(`hasVoted_${account}`);
+        localStorage.removeItem(`votedFor_${account}`);
+        
+        // Create a list of known accounts that have voted
+        const localStorageKeys = Object.keys(localStorage);
+        const votedKeys = localStorageKeys.filter(key => key.startsWith('hasVoted_'));
+        
+        // Clear votes for each account
+        votedKeys.forEach(key => {
+          const addr = key.replace('hasVoted_', '');
+          localStorage.removeItem(`hasVoted_${addr}`);
+          localStorage.removeItem(`votedFor_${addr}`);
+        });
+        
+        return { 
+          success: true, 
+          isLocalOnly: true, 
+          message: "Cleared local vote data (blockchain reset failed)" 
+        };
+      } catch (localErr) {
+        console.error("Even local storage reset failed:", localErr);
+        throw new Error("Failed to reset votes: " + (err.message || "Unknown error"));
+      }
     }
   };
 

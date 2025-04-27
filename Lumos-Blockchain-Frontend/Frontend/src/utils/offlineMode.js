@@ -77,27 +77,36 @@ export const initOfflineMode = () => {
  */
 export const testApiConnectivity = async () => {
   try {
-    // Try local health endpoint first (always works)
-    const localResponse = await fetch('/local-health', {
-      method: 'GET',
-      headers: {'Accept': 'application/json'},
-      cache: 'no-store'
+    // Use image ping technique which is more reliable for CORS situations
+    return new Promise((resolve) => {
+      // Set a timeout to handle cases where the image load/error events might not fire
+      const timeoutId = setTimeout(() => {
+        console.log('API connectivity test timed out');
+        setOfflineMode(true);
+        resolve(false);
+      }, 5000);
+
+      // Create a test image pointing to the health endpoint
+      const img = new Image();
+      
+      // On successful load - API is reachable
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        setOfflineMode(false);
+        resolve(true);
+      };
+      
+      // On error - API is not reachable
+      img.onerror = () => {
+        clearTimeout(timeoutId);
+        console.log('API connectivity test failed - image could not load');
+        setOfflineMode(true);
+        resolve(false);
+      };
+      
+      // Add timestamp to prevent caching
+      img.src = `https://lumos-mz9a.onrender.com/health-check?_=${Date.now()}`;
     });
-    
-    if (!localResponse.ok) {
-      return false;
-    }
-    
-    // Then try the actual render.com endpoint
-    const response = await fetch('/health', {
-      method: 'HEAD',
-      cache: 'no-store',
-      timeout: 3000
-    });
-    
-    const isConnected = response.ok;
-    setOfflineMode(!isConnected);
-    return isConnected;
   } catch (error) {
     console.warn('API connectivity test failed:', error);
     setOfflineMode(true);

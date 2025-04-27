@@ -616,3 +616,23 @@
 .animate-spin-slow {
   animation: spin-slow 3s linear infinite;
 }
+
+/* Phase transition animations */
+.phase-update-flash {
+  animation: phase-update-flash 1.5s ease-in-out;
+}
+
+@keyframes phase-update-flash {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgba(99, 102, 241, 0.15); }
+}
+
+/* For dark mode */
+.dark .phase-update-flash {
+  animation: phase-update-flash-dark 1.5s ease-in-out;
+}
+
+@keyframes phase-update-flash-dark {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgba(99, 102, 241, 0.3); }
+}

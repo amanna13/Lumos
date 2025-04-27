@@ -18,10 +18,15 @@ contract Voting {
     uint256 public proposalCount;
     address public grantManager;
 
+    // Add gas pricing variables
+    uint256 public minGasPrice = 20000000000; // 20 gwei default minimum
+
     // Events
     event ProposalSubmitted(uint256 indexed proposalId, string title, address proposer);
     event VoteCast(uint256 indexed proposalId, address voter);
     event VoteCleared(address indexed voter, uint256 indexed proposalId);
+    event VotesReset();
+    event AdminVotesReset();
 
     modifier onlyGrantManager() {
         require(msg.sender == grantManager, "Only GrantManager can call this");
@@ -58,6 +63,12 @@ contract Voting {
     function vote(uint256 _proposalId) external {
         require(!hasVoted[msg.sender], "You have already voted");
         require(_proposalId > 0 && _proposalId <= proposalCount, "Invalid proposal");
+
+        // Add a gas price check to prevent stuck transactions (can be removed in production)
+        // This helps educate users to use sufficient gas on Base Sepolia
+        if (tx.gasprice < minGasPrice) {
+            require(tx.gasprice >= minGasPrice, "Gas price too low for Base Sepolia, use at least 20 gwei");
+        }
 
         proposals[_proposalId].voteCount += 1;
         hasVoted[msg.sender] = true;
@@ -100,6 +111,25 @@ contract Voting {
         }
         // Clear the voters array
         delete voters;
+        emit AdminVotesReset();
+    }
+
+    // Add function to update minimum gas price (helpful for network congestion)
+    function updateMinGasPrice(uint256 _newMinGasPrice) external onlyGrantManager {
+        minGasPrice = _newMinGasPrice;
+    }
+
+    function getVoteCount(uint256 _proposalId) external view returns (uint256) {
+        require(_proposalId > 0 && _proposalId <= proposalCount, "Invalid proposal");
+        return proposals[_proposalId].voteCount;
+    }
+
+    function getAllProposals() external view returns (Proposal[] memory) {
+        Proposal[] memory all = new Proposal[](proposalCount);
+        for (uint256 i = 1; i <= proposalCount; i++) {
+            all[i-1] = proposals[i];
+        }
+        return all;
     }
 
     function getWinner() public view returns (uint256 winningProposalId, string memory title, address proposer) {

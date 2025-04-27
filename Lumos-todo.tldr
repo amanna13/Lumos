@@ -96,6 +96,11 @@
 											"content": [
 												{
 													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
 													"text": "Make the Voting System Work Properly"
 												}
 											]
@@ -113,6 +118,11 @@
 											"content": [
 												{
 													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
 													"text": "Groq Evaluation should be done correctly"
 												}
 											]
@@ -130,6 +140,11 @@
 											"content": [
 												{
 													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
 													"text": "Multiple Devices Voting and Implementation"
 												}
 											]
@@ -181,6 +196,11 @@
 											"content": [
 												{
 													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
 													"text": "Create API Endpoint for \"/current-phase\""
 												}
 											]
@@ -198,6 +218,11 @@
 											"content": [
 												{
 													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
 													"text": "add mail sending system for winners"
 												}
 											]
@@ -281,7 +306,63 @@
 											"content": [
 												{
 													"type": "text",
-													"text": "Add Marketplace system"
+													"text": "PPT for Lumos"
+												}
+											]
+										}
+									]
+								},
+								{
+									"type": "listItem",
+									"content": [
+										{
+											"type": "paragraph",
+											"attrs": {
+												"dir": "auto"
+											},
+											"content": [
+												{
+													"type": "text",
+													"text": "Read Me Update"
+												}
+											]
+										}
+									]
+								},
+								{
+									"type": "listItem",
+									"content": [
+										{
+											"type": "paragraph",
+											"attrs": {
+												"dir": "auto"
+											},
+											"content": [
+												{
+													"type": "text",
+													"marks": [
+														{
+															"type": "highlight"
+														}
+													],
+													"text": "Video Record for Lumos"
+												}
+											]
+										}
+									]
+								},
+								{
+									"type": "listItem",
+									"content": [
+										{
+											"type": "paragraph",
+											"attrs": {
+												"dir": "auto"
+											},
+											"content": [
+												{
+													"type": "text",
+													"text": "Edit Video for Lumos"
 												}
 											]
 										}
@@ -299,9 +380,9 @@
 		{
 			"id": "pointer:pointer",
 			"typeName": "pointer",
-			"x": 858.2888354294748,
-			"y": 255.57693485044325,
-			"lastActivityTimestamp": 1745605479144,
+			"x": 648.9681961297163,
+			"y": 368.22200358342883,
+			"lastActivityTimestamp": 1745763802345,
 			"meta": {}
 		},
 		{
@@ -339,7 +420,7 @@
 			"isFocused": true,
 			"devicePixelRatio": 1.440000057220459,
 			"isCoarsePointer": false,
-			"isHoveringCanvas": true,
+			"isHoveringCanvas": false,
 			"openMenus": [],
 			"isChangingStyle": false,
 			"isReadonly": false,
@@ -366,7 +447,7 @@
 		},
 		{
 			"x": -117.81695153150639,
-			"y": 163.88210490333086,
+			"y": -128.18070393657186,
 			"z": 0.464465419232265,
 			"meta": {},
 			"id": "camera:page:page",

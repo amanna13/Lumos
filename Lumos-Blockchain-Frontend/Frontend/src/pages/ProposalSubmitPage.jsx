@@ -16,11 +16,17 @@ export default function ProposalSubmitPage() {
   }, []);
   
   const navigate = useNavigate()
+  
+  // Add fallback values when useBlockchain returns null
+  const blockchainContext = useBlockchain() || {};
   const { 
-    isConnected, 
-    currentPhase, 
-    connect 
-  } = useBlockchain()
+    isConnected = false, 
+    currentPhase = "Submission", 
+    connect = async () => { 
+      console.error("Blockchain context not available");
+      throw new Error("Unable to connect wallet: Blockchain service not available");
+    }
+  } = blockchainContext;
   
   const [formData, setFormData] = useState({
     name: '',

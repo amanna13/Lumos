@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 import { testApiConnectivity } from './utils/offlineMode'
+import { initializePhaseSynchronization } from './utils/phaseSync'
 
 // Check API connectivity early
 testApiConnectivity()
@@ -13,6 +14,9 @@ testApiConnectivity()
   .catch(err => {
     console.warn('Error during connectivity check:', err);
   });
+
+// Initialize phase synchronization
+initializePhaseSynchronization();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

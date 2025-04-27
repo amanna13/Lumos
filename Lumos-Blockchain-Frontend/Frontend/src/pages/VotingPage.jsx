@@ -4,6 +4,13 @@ import { useBlockchain } from '../context/BlockchainContext'
 import websocketService from '../utils/websocketService'
 import { ethers } from 'ethers'
 import VotingABI from '../contracts/Voting.json'
+import { castVoteOnChain } from '../utils/voteHelpers'
+import { getBaseSepoliaGasOverrides, verifyTransactionOnBaseSepolia } from '../utils/transactionHelper'
+import { storeLocalVote, updateLocalVoteStatus } from '../utils/localVoteStorage'
+
+const BASE_SEPOLIA_CHAIN_ID = 84532;
+// Add increased timeout duration - Base Sepolia can be very slow
+const TRANSACTION_TIMEOUT = 300000; // 5 minutes instead of 2 minutes
 
 // Helper: extract only the required fields from markdown description
 function extractFields(description) {
@@ -46,16 +53,26 @@ function getProposalTitle(proposal) {
 
 export default function VotingPage() {
   const navigate = useNavigate()
+  
+  // Add fallback values when useBlockchain returns null to prevent destructuring errors
+  const blockchainContext = useBlockchain() || {};
   const { 
-    isConnected, 
-    currentPhase, 
-    voteForProposal, 
-    connect, 
-    account,
-    hasVoted,
-    diagnoseContractConnectivity,
-    clearVote
-  } = useBlockchain()
+    isConnected = false, 
+    currentPhase = "Voting", 
+    voteForProposal = async () => {
+      console.error("Blockchain context not available");
+      throw new Error("Voting function not available");
+    }, 
+    connect = async () => {
+      console.error("Blockchain context not available");
+      throw new Error("Connect function not available");
+    }, 
+    account = '',
+    hasVoted = async () => false,
+    diagnoseContractConnectivity = async () => ({}),
+    clearVote = async () => ({}),
+    votingContractAddress = ''
+  } = blockchainContext;
   
   const [proposals, setProposals] = useState([])
   const [selectedProposal, setSelectedProposal] = useState(null)
@@ -70,6 +87,10 @@ export default function VotingPage() {
   const [isResettingVote, setIsResettingVote] = useState(false);
   const [provider, setProvider] = useState(null);
   const [votingContract, setVotingContract] = useState(null);
+  const [networkChainId, setNetworkChainId] = useState(null);
+  const [networkName, setNetworkName] = useState('');
+  const [transactionHash, setTransactionHash] = useState(null);
+  const [verificationInProgress, setVerificationInProgress] = useState(false);
 
   // Scroll to top on mount
   useEffect(() => {
@@ -78,40 +99,65 @@ export default function VotingPage() {
 
   // Setup provider and contract when connected
   useEffect(() => {
-    if (isConnected && window.ethereum) {
+    if (isConnected && window.ethereum && votingContractAddress) {
       const ethProvider = new ethers.BrowserProvider(window.ethereum);
       setProvider(ethProvider);
-      // Voting contract address from context or env
-      const votingAddress = import.meta.env.VITE_VOTING_ADDRESS;
-      if (votingAddress) {
-        const contract = new ethers.Contract(
-          votingAddress,
-          VotingABI.abi || VotingABI,
-          ethProvider
-        );
-        setVotingContract(contract);
+      const contract = new ethers.Contract(
+        votingContractAddress,
+        VotingABI.abi || VotingABI,
+        ethProvider
+      );
+      setVotingContract(contract);
+    }
+  }, [isConnected, votingContractAddress]);
+
+  // Track current network and update on chain changes
+  useEffect(() => {
+    async function fetchNetwork() {
+      if (window.ethereum) {
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const network = await provider.getNetwork();
+          setNetworkChainId(Number(network.chainId));
+          setNetworkName(network.name || '');
+        } catch {
+          setNetworkChainId(null);
+          setNetworkName('');
+        }
       }
     }
-  }, [isConnected]);
+    fetchNetwork();
+    if (window.ethereum && window.ethereum.on) {
+      window.ethereum.on('chainChanged', fetchNetwork);
+      return () => window.ethereum.removeListener('chainChanged', fetchNetwork);
+    }
+  }, []);
+
+  const isOnBaseSepolia = networkChainId === BASE_SEPOLIA_CHAIN_ID;
 
   // Helper: fetch vote count from blockchain for a proposal id
   const getVoteCountFromBlockchain = useCallback(async (proposalId) => {
-    if (!votingContract || !proposalId) return null;
+    if (!votingContract || !proposalId) return "0";
     try {
       const numericId = parseInt(proposalId, 10);
-      if (isNaN(numericId)) return null;
+      if (isNaN(numericId)) return "0";
+      // Defensive: Only call if contract is on the correct network
+      if (provider) {
+        const network = await provider.getNetwork();
+        if (network.chainId !== 84532n) return "0";
+      }
       const proposal = await votingContract.proposals(numericId);
-      return proposal.voteCount?.toString() || "0";
+      return proposal.voteCount ? proposal.voteCount.toString() : "0";
     } catch (err) {
       console.warn("Failed to fetch vote count from blockchain:", err);
-      return null;
+      return "0";
     }
-  }, [votingContract]);
+  }, [votingContract, provider]);
 
-  // Fetch proposals from API and update vote counts from blockchain
+  // Fetch proposals from API and update vote counts from blockchain - improve with better error handling
   const fetchProposals = useCallback(async () => {
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError('');
     try {
       // Use timestamp to avoid caching issues
       const timestamp = Date.now();
@@ -128,92 +174,38 @@ export default function VotingPage() {
       const text = await response.text();
       if (!text || text.trim() === '') throw new Error('Empty response from server');
       
-      console.log('API response text:', text.substring(0, 200) + '...');
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", parseError);
+        throw new Error('Invalid response format from server');
+      }
       
-      const data = JSON.parse(text);
       if (!Array.isArray(data)) throw new Error('Invalid proposals data: not an array');
       
-      console.log('Fetched proposals count:', data.length);
-      
-      // Add debug point to check data structure
-      console.log('Raw API response data structure:', data);
-      
-      // Handle the new API response format which has proposal nested inside each item
+      // Process proposals into a consistent format
       const normalized = data.map((item, index) => {
-        console.log(`Full item ${index}:`, item); // Log the entire item to understand its structure
-        
-        // Extract the proposal from the nested structure - handle different API formats
-        let p;
-        if (item.proposal) {
-          p = item.proposal;
-        } else if (item.proposalData) {
-          p = item.proposalData;
-        } else if (item.data) {
-          p = item.data;
-        } else {
-          p = item;
-        }
-
-        // Defensive: fallback to empty object if p is null/undefined
-        if (!p) p = {};
-
-        // Extract fields safely, with fallbacks and more debugging
+        const p = item.proposal || item.proposalData || item.data || item;
         const description = p.description || item.description || '';
-        // Improved proposer extraction: check all possible nested locations
-        let proposerFinal =
-          p.proposer ||
-          item.proposer ||
-          (item.proposal && item.proposal.proposer) ||
-          (item.proposalData && item.proposalData.proposer) ||
-          (item.data && item.data.proposer) ||
-          (p._fields && p._fields.proposer) ||
-          'Unknown';
-
-        // Try to extract projectTitle from multiple places and markdown
         const mergedFields = {
           ...(extractFields(description)),
           ...(p || {}),
         };
+        const title = mergedFields.projectTitle?.trim() || p.projectTitle?.trim() || item.projectTitle?.trim() || p.title?.trim() || item.title?.trim() || `Example Proposal ${index + 1}`;
+        const descriptionFinal = description || mergedFields.projectDescription || mergedFields.description || '';
+        // Fetch proposer name from all possible sources
+        const proposerFinal =
+          p.proposerName ||
+          item.proposerName ||
+          mergedFields.name ||
+          p.name ||
+          item.name ||
+          p.proposer ||
+          item.proposer ||
+          'Unknown';
 
-        // Title fallback logic: prefer markdown projectTitle, then object, then fallback
-        let title =
-          mergedFields.projectTitle && mergedFields.projectTitle.trim()
-            ? mergedFields.projectTitle
-            : (p.projectTitle && p.projectTitle.trim())
-              ? p.projectTitle
-              : (item.projectTitle && item.projectTitle.trim())
-                ? item.projectTitle
-                : (p.title && p.title.trim())
-                  ? p.title
-                  : (item.title && item.title.trim())
-                    ? item.title
-                    : "";
-
-        // Defensive: ensure title is not empty, fallback to Example Proposal n
-        if (!title || typeof title !== 'string' || !title.trim()) {
-          title = `Example Proposal ${index + 1}`;
-        }
-
-        // Description fallback logic
-        let descriptionFinal =
-          description ||
-          mergedFields.projectDescription ||
-          mergedFields.description ||
-          '';
-
-        // Defensive: ensure title, proposer, description are not undefined/null
-        if (!title || typeof title !== 'string' || !title.trim()) {
-          title = `Proposal ${index + 1}`;
-        }
-        if (!proposerFinal || typeof proposerFinal !== 'string' || !proposerFinal.trim()) {
-          proposerFinal = 'Unknown';
-        }
-        if (!descriptionFinal || typeof descriptionFinal !== 'string') {
-          descriptionFinal = '';
-        }
-
-        // Compose normalized proposal
-        const normalizedProposal = {
+        return {
           ...p,
           id: (index + 1).toString(),
           voteCount: p.voteCount || item.voteCount || "0",
@@ -223,200 +215,359 @@ export default function VotingPage() {
           description: descriptionFinal,
           _fields: mergedFields,
         };
-
-        return normalizedProposal;
       });
       
-      console.log('Final normalized proposals:', normalized);
-      
-      // Force UI refresh by creating a new array
       let proposalsFromApi = [...normalized];
-      if (votingContract && proposalsFromApi.length > 0) {
-        // Fetch vote counts in parallel
-        const updatedProposals = await Promise.all(
-          proposalsFromApi.map(async (p) => {
-            const voteCount = await getVoteCountFromBlockchain(p.id);
-            return {
-              ...p,
-              voteCount: voteCount !== null ? voteCount : p.voteCount
-            };
-          })
-        );
-        setProposals(updatedProposals);
-      } else {
-        setProposals(proposalsFromApi);
+      
+      // Update vote counts from blockchain
+      for (let i = 0; i < proposalsFromApi.length; i++) {
+        const proposal = proposalsFromApi[i];
+        proposal.voteCount = await getVoteCountFromBlockchain(proposal.id);
       }
+
+      // Process proposals but don't fetch vote counts for Voting page display
+      // We'll only populate basic proposal data needed for voting
+      setProposals(proposalsFromApi);
       
-      // Debug what's in state
-      setTimeout(() => {
-        console.log('Current proposals in state:', proposals);
-      }, 100);
-      
+      // Check voted status after loading proposals
+      if (isConnected && account) {
+        const voted = await hasVoted(account);
+        setHasVoted(voted);
+        if (voted) {
+          const votedForId = localStorage.getItem(`votedFor_${account}`);
+          if (votedForId) {
+            const votedProposal = proposalsFromApi.find(p => p.id === votedForId);
+            if (votedProposal) {
+              setVotedProposal(votedProposal);
+              setSelectedProposal(votedProposal.id);
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error("Error fetching proposals:", err);
       setError(err.message || 'Failed to load proposals');
-      
-      // Create fallback proposals if we couldn't fetch any
-      const fallbackProposals = [];
-      for (let i = 0; i < 3; i++) {
-        fallbackProposals.push({
-          id: `error-fallback-${i + 1}`,
-          title: `Example Proposal ${i + 1}`,
-          description: "This is an example proposal created because proposals couldn't be fetched from the API.",
-          proposer: "0x0000000000000000000000000000000000000000",
-          voteCount: "0",
-          rank: i + 1,
-          _fields: {
-            name: "Example Proposer",
-            emailId: "example@example.com",
-            projectTitle: `Example Proposal ${i + 1}`,
-            brief_summary: "This is an example proposal created because we couldn't fetch real proposals from the API."
-          }
-        });
+      // Create dummy proposals if we can't load from API to prevent UI from hanging
+      setProposals([
+        {
+          id: "error-1",
+          title: "Error Loading Proposals",
+          description: "We encountered an error while loading proposals. Please try refreshing the page.",
+          _fields: { name: "System" },
+          proposer: "System",
+          voteCount: "0"
+        }
+      ]);
+    } finally {
+      setLoading(false); // Always set loading to false regardless of success/failure
+    }
+  }, [isConnected, account, hasVoted, getVoteCountFromBlockchain]);
+
+  // Now add the effect AFTER fetchProposals is defined
+  useEffect(() => {
+    // Initial fetch of proposals
+    fetchProposals().catch(err => {
+      console.error("Error in initial proposal fetch:", err);
+      setError(err.message || "Failed to load proposals");
+      setLoading(false); // Ensure loading state is updated even on error
+    });
+  }, [fetchProposals]);
+
+  // Handler for submitting a vote - Improved reliability
+  const handleVote = async () => {
+    if (!selectedProposal) {
+      setError("Please select a proposal to vote for");
+      return;
+    }
+    
+    setIsVoting(true);
+    setError('');
+    setTransactionHash(null);
+    
+    try {
+      // Ensure we're connected and have the right chain
+      if (!isConnected || !provider) {
+        throw new Error("Wallet not connected. Please connect your wallet first.");
       }
       
-      setProposals(fallbackProposals);
-    } finally {
-      setLoading(false);
-    }
-  }, [votingContract, getVoteCountFromBlockchain]);
-
-  // Debug proposals whenever they change
-  useEffect(() => {
-    console.log('Proposals state updated:', proposals);
-  }, [proposals]);
-
-  // Enhance the extractFields function to be more tolerant of different formats
-  function enhancedExtractFields(description) {
-    if (!description) return {};
-    
-    console.log("Extracting fields from description:", description.substring(0, 100) + "...");
-    
-    // First try the standard extraction
-    const fields = extractFields(description);
-    
-    // If we got no fields, try a more lenient approach
-    if (Object.keys(fields).length === 0) {
-      console.log("Standard extraction found no fields, trying alternative approach");
-      
-      // Extract sections more leniently
-      const sections = description.split(/(?=\s*#+\s+)/);
-      
-      for (const section of sections) {
-        const match = section.match(/^\s*#+\s+([^:\n]+)[:\n\s]*(.+)/s);
-        if (match) {
-          const [, heading, content] = match;
-          const normalizedHeading = heading.trim().toLowerCase();
-          
-          // Map common headings to our field keys
-          if (normalizedHeading.includes('name')) fields.name = content.trim();
-          else if (normalizedHeading.includes('email')) fields.emailId = content.trim();
-          else if (normalizedHeading.includes('link')) fields.links = content.trim();
-          else if (normalizedHeading.includes('title')) fields.projectTitle = content.trim();
-          else if (normalizedHeading.includes('description')) fields.projectDescription = content.trim();
-          else if (normalizedHeading.includes('summary')) fields.brief_summary = content.trim();
-          else if (normalizedHeading.includes('goal') && !normalizedHeading.includes('specific')) fields.primaryGoal = content.trim();
-          else if (normalizedHeading.includes('objective')) fields.specificObjective = content.trim();
-          else if (normalizedHeading.includes('budget')) fields.budget = content.trim();
-          else if (normalizedHeading.includes('long term')) fields.longTermPlan = content.trim();
-          else if (normalizedHeading.includes('funding')) fields.futureFundingPlans = content.trim();
+      // Verify network before attempting to vote
+      let network;
+      try {
+        network = await provider.getNetwork();
+      } catch (netErr) {
+        setError("Could not get network from wallet. Please ensure MetaMask is unlocked and connected.");
+        setIsVoting(false);
+        return;
+      }
+      // Base Sepolia has chain ID 84532
+      if (network.chainId !== 84532n && network.chainId !== 84532) {
+        // Try to request network switch
+        if (window.ethereum && window.ethereum.request) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x14A34' }], // 84532 in hex
+            });
+            // Wait for network to update
+            network = await provider.getNetwork();
+            if (network.chainId !== 84532n && network.chainId !== 84532) {
+              setError("Wrong network. Please switch to Base Sepolia (Chain ID: 84532) in your wallet.");
+              setIsVoting(false);
+              return;
+            }
+          } catch (switchErr) {
+            setError("Please switch your wallet to Base Sepolia (Chain ID: 84532) and try again.");
+            setIsVoting(false);
+            return;
+          }
+        } else {
+          setError("Wrong network. Please switch to Base Sepolia (Chain ID: 84532) in your wallet.");
+          setIsVoting(false);
+          return;
         }
       }
-    }
-    
-    // If still no title found but there's a description, use first line as title
-    if (!fields.projectTitle && description) {
-      const firstLine = description.split('\n')[0].trim();
-      if (firstLine) {
-        fields.projectTitle = firstLine;
-        console.log("Using first line as title:", firstLine);
-      }
-    }
-    
-    // If still no summary, use the first paragraph
-    if (!fields.brief_summary && description) {
-      const paragraphs = description.split('\n\n');
-      if (paragraphs.length > 0) {
-        fields.brief_summary = paragraphs[0].trim();
-        console.log("Using first paragraph as summary");
-      }
-    }
-    
-    console.log("Final extracted fields:", Object.keys(fields));
-    return fields;
-  }
 
-  // Override the original extractFields function with our enhanced version
-  useEffect(() => {
-    const originalExtractFields = extractFields;
-    window.originalExtractFields = originalExtractFields; // Save for debugging
-    
-    // Replace the global extractFields with our enhanced version while preserving the original
-    window.extractFields = enhancedExtractFields;
-    
-    return () => {
-      // Restore original when component unmounts
-      window.extractFields = window.originalExtractFields;
-    };
-  }, []);
-
-  // Fetch proposals on mount and when connected
-  useEffect(() => {
-    if (isConnected) fetchProposals();
-  }, [isConnected, fetchProposals]);
-
-  // Voting status
-  useEffect(() => {
-    const checkVotingStatus = async () => {
-      if (isConnected && account) {
+      // Execute the vote transaction with improved error handling
+      if (votingContract && provider) {
+        // Always get a fresh signer from the provider
+        let signer;
         try {
-          const voted = await hasVoted(account);
-          setHasVoted(voted);
-          if (voted) {
-            // Find the voted proposal from fetched proposals (API, not blockchain)
-            const votedForId = localStorage.getItem(`votedFor_${account}`);
-            if (votedForId) {
-              const votedFor = proposals.find(p => p.id === votedForId);
-              if (votedFor) {
-                setVotedProposal(votedFor);
-                setSelectedProposal(votedFor.id);
+          signer = await provider.getSigner();
+        } catch (signerErr) {
+          setError("Could not get signer from wallet. Please ensure MetaMask is unlocked and connected.");
+          setIsVoting(false);
+          return;
+        }
+        // Defensive: check signer address matches account
+        let signerAddress;
+        try {
+          signerAddress = await signer.getAddress();
+        } catch {
+          setError("Could not get signer address. Please reconnect your wallet.");
+          setIsVoting(false);
+          return;
+        }
+        if (signerAddress.toLowerCase() !== account.toLowerCase()) {
+          setError("Wallet address mismatch. Please reconnect your wallet.");
+          setIsVoting(false);
+          return;
+        }
+
+        const contractWithSigner = votingContract.connect(signer);
+        const numericId = parseInt(selectedProposal, 10);
+
+        if (isNaN(numericId)) {
+          setError("Invalid proposal ID for voting");
+          setIsVoting(false);
+          return;
+        }
+
+        // Defensive: Only log contract functions if interface and functions exist
+        let contractFunctionNames = [];
+        if (
+          contractWithSigner &&
+          contractWithSigner.interface &&
+          contractWithSigner.interface.functions &&
+          typeof contractWithSigner.interface.functions === 'object'
+        ) {
+          contractFunctionNames = Object.keys(contractWithSigner.interface.functions)
+            .filter(f => !f.includes('('));
+        }
+        console.log("Available contract functions:", contractFunctionNames.join(', '));
+
+        try {
+          // Ensure the vote function exists
+          if (typeof contractWithSigner.vote !== 'function') {
+            setError("Vote function not available on the contract");
+            setIsVoting(false);
+            return;
+          }
+
+          // Double check contract address for debugging
+          console.log("Voting on contract at address:", await contractWithSigner.getAddress());
+
+          // Get optimized gas settings for Base Sepolia
+          const gasOverrides = await getBaseSepoliaGasOverrides(provider);
+          console.log("Using gas overrides for vote transaction:", gasOverrides);
+          
+          // Call the vote function with proper gas settings to ensure transaction completes
+          const tx = await contractWithSigner.vote(numericId, gasOverrides);
+          console.log("Vote transaction sent:", tx);
+          
+          // Save transaction hash for verification
+          setTransactionHash(tx.hash);
+          
+          // Store vote in local storage using our utility function
+          storeLocalVote(numericId.toString(), account, tx.hash);
+
+          // Consider transaction submitted as success, don't wait for confirmation
+          setSuccess(true);
+          setError("");
+          setVerificationInProgress(true);
+          
+          // Start background verification that doesn't block the UI
+          verifyTransactionInBackground(tx.hash, numericId, account);
+          
+          // Update UI immediately
+          setHasVoted(true);
+          const votedProposal = proposals.find(p => p.id === selectedProposal);
+          setVotedProposal(votedProposal);
+          
+          // Show success message with transaction link
+          setSuccess(true);
+          setError(
+            <div>
+              Your vote has been submitted to the blockchain!
+              <div className="mt-2 break-all">
+                <a 
+                  href={`https://sepolia.basescan.org/tx/${tx.hash}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline"
+                >
+                  View on Base Sepolia Explorer
+                </a>
+              </div>
+            </div>
+          );
+                   
+          // Navigate to results page after a brief delay
+          setTimeout(() => {
+            navigate('/results');
+          }, 3000);
+          
+          return;
+        } catch (txErr) {
+          // Handle transaction errors
+          if (
+            txErr?.reason?.includes("already voted") || 
+            (txErr?.errorName === "Error" && txErr?.errorArgs?.[0]?.includes("already voted"))
+          ) {
+            setHasVoted(true);
+            throw new Error("You have already voted. Each address can only vote once.");
+          }
+          throw txErr;
+        }
+      } else {
+        // Fall back to API voting if contract isn't available
+        await voteForProposal(selectedProposal);
+        
+        // Use our utility function instead of direct localStorage access
+        storeLocalVote(selectedProposal, account);
+        
+        // Update UI state
+        setHasVoted(true);
+        const votedProposal = proposals.find(p => p.id === selectedProposal);
+        setVotedProposal(votedProposal);
+        
+        // Navigate to results page
+        setTimeout(() => {
+          navigate('/results');
+        }, 1500);
+      }
+    } catch (error) {
+      console.error("Error submitting vote:", error);
+      
+      // Format user-friendly error messages
+      let errorMessage = "Failed to submit vote";
+      
+      if (error?.reason?.includes("already voted") || 
+          error?.message?.includes("already voted") ||
+          (error?.errorName === "Error" && error?.errorArgs?.[0]?.includes("already voted"))) {
+        errorMessage = "You have already voted. You cannot vote again.";
+        
+        // Double-check and update the UI state if they've actually voted
+        const voted = await hasVoted(account);
+        setHasVoted(voted);
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
+      setSuccess(false);
+    } finally {
+      setIsVoting(false);
+    }
+  };
+
+  // Helper function to verify transaction status in background
+  const verifyTransactionInBackground = async (txHash, proposalId, voterAccount) => {
+    // Start in a non-blocking way
+    setTimeout(async () => {
+      // Keep trying up to 30 times with a 20-second delay between attempts
+      for (let attempt = 0; attempt < 30; attempt++) {
+        try {
+          console.log(`Background verification attempt ${attempt + 1} for tx: ${txHash}`);
+          
+          // Wait between checks
+          await new Promise(r => setTimeout(r, 20000));
+          
+          if (!provider) {
+            console.warn("Provider not available for transaction verification");
+            continue;
+          }
+          
+          // Use our verification utility
+          const verificationResult = await verifyTransactionOnBaseSepolia(provider, txHash);
+          console.log("Verification result:", verificationResult);
+          
+          if (verificationResult.exists) {
+            if (verificationResult.status === "success") {
+              // Transaction success! Update local vote count to match blockchain
+              console.log("Vote transaction confirmed successfully in the background");
+              
+              // Use our utility function to update the status
+              updateLocalVoteStatus(proposalId.toString(), "confirmed");
+              
+              // Try to update the API as well to ensure consistency
+              try {
+                const response = await fetch('https://lumos-mz9a.onrender.com/proposals/updateVotes', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    voter: voterAccount,
+                    proposalId,
+                    action: 'vote',
+                    transactionHash: txHash
+                  })
+                });
+                
+                if (response.ok) {
+                  console.log("Successfully updated vote on server");
+                }
+              } catch (apiErr) {
+                console.warn("Failed to update vote on server:", apiErr);
               }
+              
+              return true;
+            } else if (verificationResult.status === "failed") {
+              // Transaction failed on chain - update local storage
+              console.error("Vote transaction failed on-chain");
+              updateLocalVoteStatus(proposalId.toString(), "failed");
+              return false;
             }
+            // Still pending, continue checking
+          } else {
+            console.log("Transaction not found yet, may still be propagating...");
           }
         } catch (err) {
-          setError("Error checking vote status");
+          console.warn("Error in background verification:", err);
         }
       }
-    };
-    checkVotingStatus();
-    // Only rerun when proposals change, so we always use API data
-  }, [isConnected, account, hasVoted, proposals]);
-
-  // Real-time vote updates
-  useEffect(() => {
-    if (isConnected && currentPhase === "Voting") {
-      // Use polling instead of websockets for updates
-      const pollingInterval = setInterval(() => {
-        fetchProposals();
-      }, 30000); // Poll every 30 seconds
       
-      return () => {
-        clearInterval(pollingInterval);
-      };
-    }
-  }, [isConnected, currentPhase, fetchProposals]);
+      // After all attempts, just log the status
+      console.log(`Transaction verification ended after max attempts: ${txHash}`);
+      return false;
+    }, 0);
+  };
 
   // Format description for modal (returns only the required fields)
   const formatDescription = (proposal) => {
     if (!proposal || !proposal._fields) {
       return {};
     }
-    
-    // Return all available fields from proposal instead of just the extracted fields
     const allFields = {
-      // First include all direct properties from the proposal object
       ...Object.keys(proposal).reduce((acc, key) => {
-        // Skip internal properties (starting with underscore), complex objects, and fields we want to hide
         const fieldsToHide = ['id', 'rank', 'submittedAt', 'stellarWalletAddress', 'status', '_id'];
         if (!key.startsWith('_') && 
             !fieldsToHide.includes(key) &&
@@ -426,32 +577,26 @@ export default function VotingPage() {
         }
         return acc;
       }, {}),
-      
-      // Then include the fields we've extracted (these will override any duplicates)
       ...(proposal._fields || {})
     };
     
-    console.log('All available fields for modal:', allFields);
     return allFields;
   };
 
   // Get brief summary for card - improved with better fallbacks
   const getBriefDescription = (proposal) => {
     if (!proposal) return "No description available";
-    
-    // Try summary from fields first
+
     if (proposal._fields?.brief_summary) {
       const summary = proposal._fields.brief_summary;
       return summary.length > 150 ? summary.substring(0, 147) + '...' : summary;
     }
     
-    // Then try project description from fields
     if (proposal._fields?.projectDescription) {
       const desc = proposal._fields.projectDescription;
       return desc.length > 150 ? desc.substring(0, 147) + '...' : desc;
     }
     
-    // Then try raw description
     if (proposal.description) {
       const firstParagraph = proposal.description.split('\n\n')[0] || proposal.description;
       return firstParagraph.length > 150 ? firstParagraph.substring(0, 147) + '...' : firstParagraph;
@@ -462,21 +607,18 @@ export default function VotingPage() {
 
   // Handler for showing the details modal
   const handleShowDetails = (proposalOrId) => {
-    // Always resolve to the latest proposal object from proposals array
     let proposalId = null;
     if (typeof proposalOrId === "string") {
       proposalId = proposalOrId;
     } else if (proposalOrId && proposalOrId.id) {
       proposalId = proposalOrId.id;
     }
-    let proposalObj = proposalId
-      ? proposals.find(p => p.id === proposalId)
+    let proposalObj = proposalId 
+      ? proposals.find(p => p.id === proposalId) 
       : null;
-    // If not found, fallback to the input object if it looks like a proposal
     if (!proposalObj && proposalOrId && typeof proposalOrId === "object") {
       proposalObj = proposalOrId;
     }
-    // If still not found, fallback to a minimal placeholder
     if (!proposalObj) {
       proposalObj = {
         id: proposalId || "unknown",
@@ -490,43 +632,25 @@ export default function VotingPage() {
     setShowModal(true);
   };
 
-  // Handler for submitting a vote
-  const handleVote = async () => {
-    if (!selectedProposal) {
-      return;
-    }
-
-    setIsVoting(true);
-    try {
-      const result = await voteForProposal(selectedProposal);
-      console.log("Vote submitted successfully:", result);
-
-      // Also update local storage to keep track of the vote
-      localStorage.setItem(`hasVoted_${account}`, 'true');
-      localStorage.setItem(`votedFor_${account}`, selectedProposal);
-
-      // Always fetch proposals from API after voting to get latest metadata
-      await fetchProposals();
-
-      // Update UI state
-      setHasVoted(true);
-      // Always get the latest proposal object from proposals array (API, not blockchain)
-      const voted = proposals.find(p => p.id === selectedProposal);
-      setVotedProposal(voted);
-
-      // Display success message
-      setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        alert("Your vote has been submitted to the blockchain and will be reflected in the results soon. Blockchain transactions may take a few moments to process.");
-      }, 3000);
-    } catch (error) {
-      console.error("Error submitting vote:", error);
-      setError(error.message || "Failed to submit vote");
-    } finally {
-      setIsVoting(false);
-    }
-  };
+  // Update the loading state to handle UI edge cases
+  if (loading) {
+    return (
+      <div className="pt-20">
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+          <div className="text-center">
+            <div className="spinner-border animate-spin inline-block w-8 h-8 border-4 rounded-full text-indigo-600" role="status"></div>
+            <p className="text-slate-600 dark:text-slate-300 mt-4">Loading proposals...</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // UI rendering
   if (!isConnected) {
@@ -544,6 +668,51 @@ export default function VotingPage() {
                 className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300"
               >
                 Connect Wallet
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if not on Base Sepolia
+  if (isConnected && !isOnBaseSepolia) {
+    return (
+      <div className="pt-20">
+        <div className="min-h-screen py-12 px-6 bg-slate-50 dark:bg-slate-900">
+          <div className="container mx-auto max-w-lg text-center">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-8">
+              <div className="w-20 h-20 mx-auto bg-yellow-100 rounded-full flex items-center justify-center mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold mb-4">Wrong Network</h1>
+              <p className="text-slate-600 dark:text-slate-300 mb-4">
+                Please switch your wallet to <span className="font-semibold">Base Sepolia Testnet</span> (Chain ID: 84532) to participate in voting.
+              </p>
+              <div className="mb-2 text-sm text-slate-500 dark:text-slate-400">
+                {networkChainId && (
+                  <>Current network: <span className="font-mono">{networkName || 'Unknown'} (Chain ID: {networkChainId})</span></>
+                )}
+              </div>
+              <button
+                onClick={async () => {
+                  if (window.ethereum && window.ethereum.request) {
+                    try {
+                      await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x14A34' }],
+                      });
+                    } catch (err) {
+                      // ignore
+                    }
+                  }
+                }}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300"
+              >
+                Switch to Base Sepolia
               </button>
             </div>
           </div>
@@ -575,7 +744,7 @@ export default function VotingPage() {
                   Reload Page
                 </button>
                 <button 
-                  onClick={() => navigate('/')}
+                  onClick={() => navigate('/')} 
                   className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
                 >
                   Return to Home
@@ -588,23 +757,34 @@ export default function VotingPage() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="pt-20">
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-          <div className="text-center">
-            <div className="spinner-border animate-spin inline-block w-8 h-8 border-4 rounded-full text-indigo-600" role="status"></div>
-            <p className="text-slate-600 dark:text-slate-300 mt-4">Loading proposals...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Main component render
   return (
     <div className="pt-20">
       <div className="min-h-screen py-12 px-6 bg-slate-50 dark:bg-slate-900">
+        {/* Show transaction verification status */}
+        {verificationInProgress && transactionHash && (
+          <div className="fixed bottom-4 right-4 bg-white dark:bg-slate-800 rounded-lg shadow-xl p-4 max-w-md z-40">
+            <div className="flex items-center">
+              <div className="mr-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-600"></div>
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm">Transaction Processing</h4>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Your vote is being processed on Base Sepolia. This can take several minutes.
+                </p>
+                <a 
+                  href={`https://sepolia.basescan.org/tx/${transactionHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 mt-1 inline-block"
+                >
+                  View on Block Explorer →
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="container mx-auto max-w-6xl">
           <h1 className="text-3xl font-bold mb-6">Voting Page</h1>
           {!isConnected ? (
@@ -649,9 +829,8 @@ export default function VotingPage() {
                       </p>
                       <div className="bg-white dark:bg-slate-800 rounded-lg p-4 mb-4">
                         <h4 className="font-bold">{getProposalTitle(votedProposal)}</h4>
-                        <p className="text-sm text-slate-500">Current Votes: {votedProposal.voteCount}</p>
                         <div className="mt-2">
-                          <button
+                          <button 
                             onClick={() => handleShowDetails(votedProposal)}
                             className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center"
                           >
@@ -675,74 +854,6 @@ export default function VotingPage() {
                     >
                       View Current Results
                     </button>
-                    
-                    {/* TESTING MODE: Reset buttons for testing the voting system */}
-                    <div className="mt-4 p-2 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
-                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mb-2">Testing Tools</p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        <button
-                          onClick={async () => {
-                            if (window.confirm('This will reset your vote in local storage only. Continue?')) {
-                              try {
-                                // Clear local storage vote records
-                                localStorage.removeItem(`hasVoted_${account}`);
-                                localStorage.removeItem(`votedFor_${account}`);
-                                
-                                // Check the actual blockchain state
-                                const blockchainVoted = await hasVoted(account);
-                                
-                                if (blockchainVoted) {
-                                  // Attempt to reset blockchain vote
-                                  if (window.confirm("Local storage reset, but you still have a vote on the blockchain. Would you like to perform a blockchain reset?")) {
-                                    try {
-                                      const resetResult = await clearVote(account);
-                                      if (resetResult.success && !resetResult.isLocalOnly) {
-                                        alert("Vote successfully reset both in local storage and on the blockchain!");
-                                        setHasVoted(false);
-                                        setVotedProposal(null);
-                                        setSelectedProposal(null);
-                                      } else if (resetResult.success && resetResult.isLocalOnly) {
-                                        alert("Local storage reset successfully, but blockchain vote couldn't be reset. Please contact an administrator for help.");
-                                        
-                                        // Ask if they want to go to admin page
-                                        if (window.confirm("Would you like to go to the admin panel to try a different reset method?")) {
-                                          navigate('/admin-direct?action=reset-blockchain');
-                                        }
-                                      }
-                                    } catch (resetError) {
-                                      console.error("Failed to reset vote:", resetError);
-                                      alert("Local storage reset, but blockchain reset failed. You may need admin privileges to reset votes on the blockchain.");
-                                      
-                                      // Offer to navigate to admin panel
-                                      if (window.confirm("Would you like to go to the admin panel?")) {
-                                        navigate('/admin-direct?action=reset-blockchain');
-                                      }
-                                    }
-                                  } else {
-                                    alert("Local storage reset. Contact an administrator to reset your blockchain vote.");
-                                  }
-                                } else {
-                                  alert("Local vote data cleared successfully.");
-                                  // Update UI state
-                                  setHasVoted(false);
-                                  setVotedProposal(null);
-                                  setSelectedProposal(null);
-                                }
-                                
-                                // No need to reload, just update the state based on blockchain
-                                setHasVoted(blockchainVoted);
-                              } catch (error) {
-                                console.error("Error checking blockchain vote state:", error);
-                                alert("Error verifying blockchain state. Please refresh the page manually.");
-                              }
-                            }
-                          }}
-                          className="px-3 py-1 text-xs bg-orange-500 text-white rounded-md hover:bg-orange-600 transition duration-300"
-                        >
-                          Reset Local Storage
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -758,7 +869,6 @@ export default function VotingPage() {
                       </p>
                     </div>
                   </div>
-                  
                   {proposals.length === 0 ? (
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-lg text-center">
                       <p className="text-slate-500 dark:text-slate-400">No proposals available yet.</p>
@@ -783,9 +893,6 @@ export default function VotingPage() {
                                 <h3 className="font-semibold text-lg line-clamp-2">
                                   {getProposalTitle(proposal)}
                                 </h3>
-                                <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-indigo-900 dark:text-indigo-300 whitespace-nowrap ml-2">
-                                  {proposal.voteCount || 0} votes
-                                </span>
                               </div>
                               <div className="mb-4">
                                 <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-3 min-h-[3rem]">
@@ -794,7 +901,6 @@ export default function VotingPage() {
                               </div>
                               <div className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                                 Proposer: {
-                                  // Prefer extracted name, then .name, then .proposer, then fallback
                                   proposal._fields?.name?.trim()
                                     ? proposal._fields.name
                                     : proposal.name?.trim()
@@ -809,9 +915,8 @@ export default function VotingPage() {
                                   onClick={() => handleShowDetails(proposal)}
                                   className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center"
                                 >
-                                  {/* Proper eye icon */}
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1.5 12s4-7 10.5-7 10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1.5 12s4-7 10.5-7 10.5 7-10.5 7S1.5 12 1.5 12z" />
                                     <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth={2} fill="none"/>
                                   </svg>
                                   View Details
@@ -893,17 +998,12 @@ export default function VotingPage() {
                       <div className="mb-6">
                         <div className="flex justify-between items-start">
                           <h2 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">{getProposalTitle(detailProposal)}</h2>
-                          <span className="bg-indigo-100 text-indigo-800 text-sm font-medium px-3 py-1 rounded dark:bg-indigo-900 dark:text-indigo-300">
-                            {detailProposal.voteCount || 0} votes
-                          </span>
                         </div>
                       </div>
-                      {/* Show all available fields */}
                       {(() => {
                         const f = formatDescription(detailProposal);
                         return (
                           <div className="space-y-6">
-                            {/* Show all regular fields */}
                             {f.name && (
                               <div>
                                 <h4 className="text-md font-semibold mb-1 text-slate-700 dark:text-slate-300">Name</h4>
@@ -928,8 +1028,6 @@ export default function VotingPage() {
                                 <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded">{f.projectTitle}</div>
                               </div>
                             )}
-                            
-                            {/* Show full description if available */}
                             {detailProposal.description && (
                               <div>
                                 <h4 className="text-md font-semibold mb-1 text-slate-700 dark:text-slate-300">Full Description</h4>
@@ -938,8 +1036,6 @@ export default function VotingPage() {
                                 </div>
                               </div>
                             )}
-                            
-                            {/* Continue with other extracted fields */}
                             {f.projectDescription && (
                               <div>
                                 <h4 className="text-md font-semibold mb-1 text-slate-700 dark:text-slate-300">Project Description</h4>
@@ -982,10 +1078,7 @@ export default function VotingPage() {
                                 <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded whitespace-pre-line">{f.futureFundingPlans}</div>
                               </div>
                             )}
-                            
-                            {/* Display any additional fields that might be in the data but not explicitly handled */}
                             {Object.entries(f).map(([key, value]) => {
-                              // Skip fields we've already handled, technical fields, and fields we want to hide
                               const handledFields = [
                                 'id', 'title', 'proposer', 'voteCount', 'description', 'rank', 'timestamp',
                                 'name', 'emailId', 'links', 'projectTitle', 'projectDescription', 
@@ -998,11 +1091,9 @@ export default function VotingPage() {
                                   !key.startsWith('_') && 
                                   typeof value !== 'object' &&
                                   typeof value !== 'function') {
-                                // Format the key for display (capitalize, replace underscores with spaces)
                                 const formattedKey = key
                                   .replace(/_/g, ' ')
                                   .replace(/\b\w/g, l => l.toUpperCase());
-                                  
                                 return (
                                   <div key={key}>
                                     <h4 className="text-md font-semibold mb-1 text-slate-700 dark:text-slate-300">
