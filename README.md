@@ -8,8 +8,6 @@
 
 ## 📌 Problem Statement
 
-Select the problem statement number and title from the official list given in Participant Manual.
-
 **Problem Statement 6 – Better Finance for Everyone with Stellar**
 
 ---
@@ -17,7 +15,6 @@ Select the problem statement number and title from the official list given in Pa
 ## 🎯 Objective
 
 What problem does your project solve, and who does it serve?  
-Problem Solved:
 Lumos solves the inefficiencies, biases, and lack of transparency in traditional grant distribution processes.
 Today, grant applications are often reviewed behind closed doors, with opaque criteria, manual filtering, favoritism, and long wait times.
 
