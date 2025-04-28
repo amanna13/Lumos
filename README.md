@@ -56,13 +56,13 @@ Groq AI and Llama 70B Model: Initially, ranking proposals using AI was a challen
 - Frontend: Ether Js, React Js
 - Backend: Solidity, Hardhat, Java, Springboot, Apache Maven
 - Database: MongoDB
-- APIs: REST API
+- APIs: GROQ API
 - Backend Hosting: Render
 
 ### Sponsor Technologies Used (if any):
-- [✅] **Groq:**  
-- [✅] **Base:** 
-- [✅] **Stellar:** 
+- [✅] **Groq:**  Our project, Lumos, perfectly aligns with the Groq track by leveraging Groq's powerful AI capabilities to automate proposal evaluation and ranking. We use Groq to filter out spammy or low-quality submissions and objectively assess each grant proposal based on relevance, impact, feasibility, and innovation. This intelligent ranking system ensures that only the most deserving projects reach the voting phase, creating a transparent, scalable, and efficient grant funding process. Groq's AI models help us maintain fairness, save community time, and enhance the overall quality of the decentralized grant platform.
+- [✅] **Base:** Lumos leverages the Base network to power its decentralized and transparent voting mechanism. Grant proposals, after being filtered and ranked by Groq AI, enter a community-led voting phase entirely on-chain via Base Sepolia. Each participant’s vote is securely recorded on Base’s scalable Layer 2 infrastructure, ensuring immutability, low gas costs, and a fair, tamper-proof process. By using Base, Lumos empowers a global community to collectively decide which projects deserve funding without relying on centralized intermediaries. The fast finality and Ethereum-grade security of Base ensure that governance stays transparent, censorship-resistant, and highly participatory — fitting perfectly with Lumos' mission of democratizing grant funding.
+- [✅] **Stellar:** Lumos uses the Stellar network to handle decentralized grant payouts, ensuring instant, transparent, and borderless fund transfers. After a proposal wins through the on-chain Base voting, Stellar is used to disburse the allocated grant amount directly into the recipient’s Stellar wallet in XLM tokens. Stellar’s low transaction fees, rapid settlement speeds, and global accessibility ensure that winners — no matter where they are — receive their grants fairly and quickly. By integrating Stellar, Lumos removes banking barriers, promotes financial inclusion, and ensures that funding remains open and borderless, aligned with the decentralized spirit of Web3. Additionally, Stellar’s compliance-friendly infrastructure provides a foundation for scaling real-world grant programs in a trusted and auditable manner.
 ---
 
 ## ✨ Key Features
